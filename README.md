@@ -1,2 +1,2 @@
 # tablab_abc
-pdf_extractor
+pdf_extractor for labs

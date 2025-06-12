@@ -1,3 +1,4 @@
 streamlit
-PyMuPDF
+selenium
+pymupdf
 pandas

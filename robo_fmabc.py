@@ -1,72 +1,129 @@
-import streamlit as st
-import fitz  # PyMuPDF
-import re
-import pandas as pd
+# robo_fmabc.py
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import WebDriverException
+from datetime import datetime
+import os
+import time
 import tempfile
+import shutil
+import subprocess
+import streamlit as st
 
-st.set_page_config(layout="wide")
-st.title("🧪 Conversor de PDF + Extrator de Exames (modo local)")
 
-# Lista de exames-alvo e padrões associados
-EXAMES_PADROES = {
-    "Creatinina": r"CREATININA.*?\n.*?([\d,\.]+)",
-    "Ureia": r"UREIA.*?\n.*?([\d,\.]+)",
-    "Bicarbonato": r"BICARBONATO.*?\n.*?([\d,\.]+)",
-    "Sódio": r"S[ÓO]DIO.*?\n.*?([\d,\.]+)",
-    "Potássio": r"POT[ÁA]SSIO.*?\n.*?([\d,\.]+)",
-    "Magnésio": r"MAGN[ÉE]SIO.*?RESULTADO\s*:?\s*([\d,\.]+)",
-    "Cálcio": r"C[ÁA]LCIO\s*(?!IONICO|I[ÔO]NICO).*?RESULTADO\s*:?\s*([\d,\.]+)",
-    "Cálcio Iônico": r"C[ÁA]LCIO I[ÔO]NICO.*?RESULTADO\s*:?\s*([\d,\.]+)",
-    "Fósforo": r"F[ÓO]SFORO.*?\n.*?([\d,\.]+)",
-    "Hemoglobina": r"HEMOGLOBINA\s*:\s*([\d,\.]+)",
-    "Plaquetas": r"PLAQUETAS.*?:\s*([\d,\.]+)",
-    "Proteína C Reativa": r"PROTE[ÍI]NA C REATIVA.*?([\d,\.]+)",
-}
+def executar_robo_fmabc(lista_pacientes):
+    # Impede repouso do computador
+    caffeinate = subprocess.Popen(["caffeinate"])
 
-def extrair_texto_pdf(file_bytes):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(file_bytes.read())
-        tmp_path = tmp_file.name
+    # Pasta de destino com timestamp
+    base_folder = os.path.expanduser("~/myp/automacao_fmabc/pdfs_abc")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_folder = os.path.join(base_folder, timestamp)
+    os.makedirs(output_folder, exist_ok=True)
 
-    with fitz.open(tmp_path) as doc:
-        texto = "\n".join(page.get_text() for page in doc)
-    return texto
+    def iniciar_driver():
+        options = Options()
+        prefs = {
+            "download.default_directory": output_folder,
+            "download.prompt_for_download": False,
+            "plugins.always_open_pdf_externally": True
+        }
+        options.add_experimental_option("prefs", prefs)
+        options.add_argument("--start-maximized")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-extensions")
+        profile_path = tempfile.mkdtemp()
+        options.add_argument(f"--user-data-dir={profile_path}")
+        service = Service("/Users/kwayla/myp/automacao_fmabc/fmabc/chromedriver")
+        driver = webdriver.Chrome(service=service, options=options)
+        return driver, profile_path
 
-def extrair_nome(texto):
-    match = re.search(r"^\s*([A-Z\s]+)\nNome\s*:", texto, flags=re.MULTILINE)
-    return match.group(1).strip().title() if match else "Paciente Desconhecido"
+    driver, profile_path = iniciar_driver()
+    try:
+        driver.get("http://laboratorio.fmabc.br/matrixnet/wfrmBlank.aspx")
+        st.write("🌐 Navegador iniciado")
 
-def extrair_data_amostra(texto):
-    match = re.search(r"Amostra recebida em:\s*(\d{2}/\d{2}/\d{4})", texto)
-    return match.group(1) if match else ""
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, "userLogin")))
+        driver.find_element(By.NAME, "userLogin").send_keys("HOAN")
+        driver.find_element(By.NAME, "userPassword").send_keys("5438")
+        driver.find_element(By.ID, "btnEntrar").click()
 
-def extrair_valores(texto):
-    resultados = {}
-    for exame, padrao in EXAMES_PADROES.items():
-        match = re.search(padrao, texto, re.IGNORECASE | re.DOTALL)
-        resultados[exame] = match.group(1).replace(",", ".") if match else ""
-    return resultados
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))).click()
+        time.sleep(1)
+        driver.find_element(By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25").click()
 
-uploaded_files = st.file_uploader("📎 Arraste e solte seus PDFs laboratoriais aqui", type="pdf", accept_multiple_files=True)
+        progresso = st.progress(0)
+        total = len(lista_pacientes)
 
-if uploaded_files and st.button("🔍 Processar PDFs"):
-    tabela = []
+        for idx, paciente in enumerate(lista_pacientes):
+            try:
+                st.write(f"🔍 Buscando paciente: {paciente}")
+                aba_principal = driver.current_window_handle
 
-    for pdf in uploaded_files:
-        try:
-            texto = extrair_texto_pdf(pdf)
-            nome = extrair_nome(texto)
-            data = extrair_data_amostra(texto)
-            valores = extrair_valores(texto)
-            linha = {"Paciente": nome, "Data": data, **valores}
-            tabela.append(linha)
-        except Exception as e:
-            st.error(f"Erro ao processar {pdf.name}: {e}")
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "textoDigitado")))
+                campo = driver.find_element(By.ID, "textoDigitado")
+                campo.clear()
+                campo.send_keys(paciente)
+                driver.find_element(By.XPATH, "//button[contains(., 'Pesquisar')]").click()
+                time.sleep(3)
 
-    if tabela:
-        df = pd.DataFrame(tabela)
-        st.success("✅ Extração concluída com sucesso.")
-        st.dataframe(df)
+                botoes = driver.find_elements(By.XPATH, "//button[contains(., 'Laudo Completo')]")
+                if not botoes:
+                    st.warning(f"⚠️ Paciente não encontrado: {paciente}")
+                    progresso.progress((idx + 1) / total)
+                    continue
 
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("📥 Baixar CSV", data=csv, file_name="exames_extraidos.csv", mime="text/csv")
+                for botao in botoes:
+                    try:
+                        original_tabs = driver.window_handles
+                        driver.execute_script("arguments[0].click();", botao)
+                        WebDriverWait(driver, 10).until(lambda d: len(d.window_handles) > len(original_tabs))
+                        new_tabs = [tab for tab in driver.window_handles if tab not in original_tabs]
+
+                        if new_tabs:
+                            nova_aba = new_tabs[0]
+                            driver.switch_to.window(nova_aba)
+                            time.sleep(2)
+
+                            timeout = time.time() + 15
+                            while any(f.endswith(".crdownload") for f in os.listdir(output_folder)):
+                                if time.time() > timeout:
+                                    break
+                                time.sleep(1)
+
+                            driver.close()
+                            driver.switch_to.window(aba_principal)
+
+                    except:
+                        if len(driver.window_handles) > 0:
+                            try:
+                                driver.switch_to.window(aba_principal)
+                            except:
+                                pass
+                        continue
+
+                driver.switch_to.window(aba_principal)
+
+            except WebDriverException:
+                continue
+            finally:
+                progresso.progress((idx + 1) / total)
+
+        st.success(f"✅ PDFs foram baixados para a pasta: {output_folder}")
+        return output_folder
+
+    except Exception as e:
+        st.error(f"❌ Erro inesperado: {e}")
+    finally:
+        driver.quit()
+        shutil.rmtree(profile_path, ignore_errors=True)
+        caffeinate.terminate()
+        st.write("✅ Robô finalizado")

@@ -2,7 +2,7 @@
 
 import streamlit as st
 from robo_fmabc import executar_robo_fmabc
-from tablab_abc import executar_extrator_tabelado
+from extrator import executar_extrator_tabelado  # nome correto do módulo
 
 st.set_page_config(page_title="Automação FMABC Completa", layout="wide")
 st.title("🧪 Automação Completa: FMABC")

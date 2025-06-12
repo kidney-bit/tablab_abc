@@ -1,4 +1,5 @@
 streamlit
 selenium
-pymupdf
+PyMuPDF
 pandas
+pyobjc-framework-Quartz ; sys_platform == 'darwin'

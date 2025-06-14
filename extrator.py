@@ -1,4 +1,4 @@
-# extrator.py - Atualizado com função executar_extrator_tabelado() + filtros interativos (nome e data) + lógica para cálcio prioritário com persistência + botão 'Limpar Filtros'
+# extrator.py - Versão híbrida para uso em Streamlit e via chamada externa
 
 import fitz  # PyMuPDF
 import re
@@ -62,11 +62,21 @@ def extrair_exames_dos_pdfs(pasta):
                 registros.append({"Paciente": nome, "Data": data, **valores})
             except Exception:
                 continue
-    return pd.DataFrame(registros)
+    df = pd.DataFrame(registros)
+    df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
+    return df[df["Data"].notna()]
 
-def executar_extrator_tabelado():
+def executar_extrator_tabelado(pasta_manual=None):
     st.subheader("📊 Extração de exames")
     pasta_padrao = "/Users/kwayla/myp/tablab_abc/tablab_abc/pdfs_abc"
+
+    if pasta_manual:
+        df = extrair_exames_dos_pdfs(pasta_manual)
+        if not df.empty:
+            st.session_state["df_exames"] = df
+        return df
+
+    # Interface interativa
     subpastas = sorted([f.name for f in os.scandir(pasta_padrao) if f.is_dir()], reverse=True)
 
     if not subpastas:
@@ -83,8 +93,6 @@ def executar_extrator_tabelado():
             st.warning("Nenhum exame foi extraído dos PDFs.")
             return
 
-        df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
-        df = df[df["Data"].notna()]
         st.session_state["df_exames"] = df
         st.session_state["filtros_ativos"] = True
         st.success("✅ Extração concluída com sucesso.")

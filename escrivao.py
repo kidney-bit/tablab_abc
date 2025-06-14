@@ -88,6 +88,7 @@ def enviar_para_google_sheets(df, url, datas_filtradas=None, barra_progresso=Non
 
             try:
                 faixa_nome = aba.batch_get(["B1:D1"])[0][0]
+                time.sleep(1)  # ⚠️ pausa após leitura
                 b1_value = faixa_nome if isinstance(faixa_nome, str) else next((cel for cel in faixa_nome if cel), None)
                 if not b1_value:
                     print(f"⚠️ Nenhum nome encontrado na faixa B1:D1 na aba {nome_aba}")
@@ -116,6 +117,7 @@ def enviar_para_google_sheets(df, url, datas_filtradas=None, barra_progresso=Non
             print(f"🔎 Linhas a escrever: {len(dados_paciente)}")
 
             valores_aba = aba.get_all_values()
+            time.sleep(0.6)  # ⚠️ leitura também conta no limite
             linha_destino = len(valores_aba) + 1
 
             for _, linha in dados_paciente.iterrows():
@@ -131,12 +133,12 @@ def enviar_para_google_sheets(df, url, datas_filtradas=None, barra_progresso=Non
 
                 try:
                     aba.update_acell(f"A{linha_destino}", valores_formatados[0])
-                    time.sleep(0.6)  # pausa para evitar erro 429
+                    time.sleep(0.6)  # ⚠️ pausa após escrita
 
                     range_escreve = f"H{linha_destino}:T{linha_destino}"
                     valores_exames = [valores_formatados[1:13]]
                     aba.update(range_escreve, valores_exames)
-                    time.sleep(0.6)  # outra pausa
+                    time.sleep(0.6)  # ⚠️ pausa após escrita
 
                     total_preenchido += 1
                     linha_destino += 1
@@ -150,8 +152,7 @@ def enviar_para_google_sheets(df, url, datas_filtradas=None, barra_progresso=Non
             if barra_progresso:
                 barra_progresso.progress(progresso / 100)
 
-            # pausa entre abas
-            time.sleep(1.2)
+            time.sleep(1.2)  # ⚠️ pausa entre abas
 
         except Exception as e:
             print(f"❌ Erro inesperado ao processar a aba {aba.title}: {e}")

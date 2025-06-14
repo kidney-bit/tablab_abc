@@ -1,12 +1,10 @@
-# escrivao.py - Envia dados para o Google Sheets com base em B1 de cada aba, consolidando exames por paciente e por data
+# escrivao.py - Otimizado para buscar nomes pela aba "CENSO AUTOMÁTICO" (colunas A e D)
 
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-import math
 import unicodedata
 import time
-import re
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -63,6 +61,19 @@ def enviar_para_google_sheets(df, url, datas_filtradas=None, barra_progresso=Non
     nomes_df = df_grouped["Paciente"].dropna().tolist()
     nomes_normalizados = {normalizar_nome(n): n for n in nomes_df}
 
+    # 🔁 Novo: carregar todos os nomes da aba "CENSO AUTOMÁTICO"
+    try:
+        dados_censo = planilha.worksheet("CENSO AUTOMÁTICO").get("A19:D88")
+        time.sleep(1)
+        aba_para_paciente = {
+            linha[0].zfill(2): linha[3].strip().title()
+            for linha in dados_censo
+            if len(linha) >= 4 and linha[0] and linha[3]
+        }
+    except Exception as e:
+        print(f"❌ Erro ao acessar 'CENSO AUTOMÁTICO': {e}")
+        return False
+
     total_preenchido = 0
     total_abas = 0
 
@@ -86,26 +97,19 @@ def enviar_para_google_sheets(df, url, datas_filtradas=None, barra_progresso=Non
                 print(f"⏩ Aba ignorada: {nome_aba}")
                 continue
 
-            try:
-                faixa_nome = aba.batch_get(["B1:D1"])[0][0]
-                time.sleep(1)  # ⚠️ pausa após leitura
-                b1_value = faixa_nome if isinstance(faixa_nome, str) else next((cel for cel in faixa_nome if cel), None)
-                if not b1_value:
-                    print(f"⚠️ Nenhum nome encontrado na faixa B1:D1 na aba {nome_aba}")
-                    continue
-                nome_paciente_b1 = b1_value.strip().title()
-            except Exception as e:
-                print(f"⚠️ Erro ao acessar B1:D1 na aba {nome_aba}: {e}")
+            nome_paciente_b1 = aba_para_paciente.get(nome_aba)
+            if not nome_paciente_b1:
+                print(f"⚠️ Nome não encontrado na aba {nome_aba}")
                 continue
 
-            print(f"\n🧪 Verificando aba: {nome_aba} (B1 = {nome_paciente_b1})")
+            print(f"\n🧪 Verificando aba: {nome_aba} (CENSO = {nome_paciente_b1})")
             nome_b1_normalizado = normalizar_nome(nome_paciente_b1)
 
             if nome_b1_normalizado in nomes_normalizados:
                 nome_correto = nomes_normalizados[nome_b1_normalizado]
                 print(f"✅ Nome exato encontrado: {nome_correto}")
             else:
-                print(f"⚠️ Nome não encontrado: {nome_paciente_b1}")
+                print(f"⚠️ Nome não corresponde a exames extraídos: {nome_paciente_b1}")
                 continue
 
             dados_paciente = df_grouped[df_grouped["Paciente"] == nome_correto]
@@ -117,7 +121,7 @@ def enviar_para_google_sheets(df, url, datas_filtradas=None, barra_progresso=Non
             print(f"🔎 Linhas a escrever: {len(dados_paciente)}")
 
             valores_aba = aba.get_all_values()
-            time.sleep(0.6)  # ⚠️ leitura também conta no limite
+            time.sleep(0.6)
             linha_destino = len(valores_aba) + 1
 
             for _, linha in dados_paciente.iterrows():
@@ -133,12 +137,12 @@ def enviar_para_google_sheets(df, url, datas_filtradas=None, barra_progresso=Non
 
                 try:
                     aba.update_acell(f"A{linha_destino}", valores_formatados[0])
-                    time.sleep(0.6)  # ⚠️ pausa após escrita
+                    time.sleep(0.6)
 
                     range_escreve = f"H{linha_destino}:T{linha_destino}"
                     valores_exames = [valores_formatados[1:13]]
                     aba.update(range_escreve, valores_exames)
-                    time.sleep(0.6)  # ⚠️ pausa após escrita
+                    time.sleep(0.6)
 
                     total_preenchido += 1
                     linha_destino += 1
@@ -152,7 +156,7 @@ def enviar_para_google_sheets(df, url, datas_filtradas=None, barra_progresso=Non
             if barra_progresso:
                 barra_progresso.progress(progresso / 100)
 
-            time.sleep(1.2)  # ⚠️ pausa entre abas
+            time.sleep(1.2)
 
         except Exception as e:
             print(f"❌ Erro inesperado ao processar a aba {aba.title}: {e}")

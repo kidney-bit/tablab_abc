@@ -15,13 +15,13 @@ import shutil
 import subprocess
 
 def executar_robo_fmabc():
-    st.subheader("⬇️ Download de PDFs de pacientes - FMABC")
+    st.subheader("⬇️ Download de exames")
     entrada_pacientes = st.text_area("Cole aqui os nomes dos pacientes (um por linha):")
 
-    if st.button("Executar robô"):
+    if st.button("executar nephroghost"):
         caffeinate = subprocess.Popen(["caffeinate"])
 
-        base_folder = "/Users/kwayla/myp/automacao_fmabc/pdfs_abc"
+        base_folder = "/Users/kwayla/myp/tablab_abc/tablab_abc/pdfs_abc"
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         output_folder = os.path.join(base_folder, timestamp)
         os.makedirs(output_folder, exist_ok=True)
@@ -41,7 +41,7 @@ def executar_robo_fmabc():
             options.add_argument("--disable-extensions")
             profile_path = tempfile.mkdtemp()
             options.add_argument(f"--user-data-dir={profile_path}")
-            service = Service("/Users/kwayla/myp/automacao_fmabc/fmabc/chromedriver")
+            service = Service("/Users/kwayla/myp/tablab_abc/tablab_abc/chromedriver")
             driver = webdriver.Chrome(service=service, options=options)
             return driver, profile_path
 
@@ -126,4 +126,4 @@ def executar_robo_fmabc():
             driver.quit()
             shutil.rmtree(profile_path, ignore_errors=True)
             caffeinate.terminate()
-            st.write("✅ Robô finalizado")
+            st.write("✅ nephroghost finalizado")

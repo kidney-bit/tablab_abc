@@ -12,16 +12,17 @@ import time
 import os
 import tempfile
 import shutil
-import subprocess
 
 def executar_robo_fmabc():
     st.subheader("⬇️ Download de exames")
     entrada_pacientes = st.text_area("Cole aqui os nomes dos pacientes (um por linha):")
 
     if st.button("executar nephroghost"):
-        caffeinate = subprocess.Popen(["caffeinate"])
+        # ⚠️ REMOVIDO caffeinate (não existe no Linux)
+        # caffeinate = subprocess.Popen(["caffeinate"])
 
-        base_folder = "/Users/kwayla/myp/tablab_abc/tablab_abc/pdfs_abc"
+        # ✅ Caminho adaptado para VM
+        base_folder = "/home/karolinewac/tablab_abc/pdfs_abc"
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         output_folder = os.path.join(base_folder, timestamp)
         os.makedirs(output_folder, exist_ok=True)
@@ -41,7 +42,9 @@ def executar_robo_fmabc():
             options.add_argument("--disable-extensions")
             profile_path = tempfile.mkdtemp()
             options.add_argument(f"--user-data-dir={profile_path}")
-            service = Service("/Users/kwayla/myp/tablab_abc/tablab_abc/chromedriver")
+
+            # ✅ Caminho do chromedriver adaptado para VM
+            service = Service("/home/karolinewac/tablab_abc/chromedriver")
             driver = webdriver.Chrome(service=service, options=options)
             return driver, profile_path
 
@@ -125,5 +128,5 @@ def executar_robo_fmabc():
         finally:
             driver.quit()
             shutil.rmtree(profile_path, ignore_errors=True)
-            caffeinate.terminate()
+            # caffeinate.terminate()  # ⚠️ REMOVIDO
             st.write("✅ nephroghost finalizado")

@@ -1,4 +1,4 @@
-# robo_fmabc.py - Versão corrigida para problemas de VM/window closed
+# robo_fmabc_otimizado.py - Versão otimizada para downloads mais rápidos
 
 import streamlit as st
 from selenium import webdriver
@@ -12,44 +12,68 @@ import time
 import os
 import subprocess
 import glob
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+
+class DownloadMonitor:
+    """Monitor de downloads otimizado"""
+    def __init__(self, pasta_download):
+        self.pasta_download = pasta_download
+        self.arquivos_iniciais = set()
+        self.reset()
+    
+    def reset(self):
+        """Reseta o estado do monitor"""
+        try:
+            self.arquivos_iniciais = set(os.listdir(self.pasta_download))
+        except:
+            self.arquivos_iniciais = set()
+    
+    def aguardar_download(self, timeout=15):
+        """Aguarda download com verificação otimizada"""
+        inicio = time.time()
+        
+        while time.time() - inicio < timeout:
+            try:
+                arquivos_atuais = set(os.listdir(self.pasta_download))
+                
+                # Verifica arquivos temporários
+                arquivos_temp = [f for f in arquivos_atuais if f.endswith(('.crdownload', '.tmp', '.part'))]
+                
+                # Se há novos arquivos e não há temporários, download completo
+                novos_arquivos = arquivos_atuais - self.arquivos_iniciais
+                if novos_arquivos and not arquivos_temp:
+                    # Aguarda apenas 1 segundo para garantir
+                    time.sleep(1)
+                    return True
+                
+                # Se há arquivos temporários, aguarda eles sumirem
+                if arquivos_temp:
+                    # Aguarda menos tempo quando há progresso visível
+                    time.sleep(0.5)
+                else:
+                    # Aguarda mais quando não há atividade
+                    time.sleep(1)
+                    
+            except Exception:
+                time.sleep(0.5)
+        
+        # Verifica uma última vez se houve sucesso
+        try:
+            arquivos_finais = set(os.listdir(self.pasta_download))
+            return len(arquivos_finais) > len(self.arquivos_iniciais)
+        except:
+            return False
 
 
 def verificar_driver_ativo(driver):
-    """Verifica se o driver ainda está ativo e acessível"""
+    """Verifica se o driver ainda está ativo"""
     try:
         driver.current_window_handle
         return True
     except (NoSuchWindowException, WebDriverException):
         return False
-
-
-def aguardar_download_completo(pasta_download, timeout=30):
-    """Aguarda todos os downloads completarem - versão melhorada"""
-    inicio = time.time()
-    arquivos_iniciais = set(os.listdir(pasta_download))
-    
-    while time.time() - inicio < timeout:
-        try:
-            arquivos_atuais = set(os.listdir(pasta_download))
-            
-            # Verifica arquivos temporários
-            arquivos_temporarios = [f for f in arquivos_atuais if f.endswith(('.crdownload', '.tmp', '.part'))]
-            
-            # Se não há arquivos temporários E há arquivos novos, download completo
-            if not arquivos_temporarios and len(arquivos_atuais) > len(arquivos_iniciais):
-                time.sleep(2)  # Aguarda mais um pouco para garantir
-                return True
-                
-            # Se não há arquivos temporários há mais de 10 segundos, considera completo
-            if not arquivos_temporarios and time.time() - inicio > 10:
-                return True
-                
-        except Exception as e:
-            st.warning(f"Erro ao verificar downloads: {e}")
-            
-        time.sleep(1)
-    
-    return False
 
 
 def contar_pdfs_pasta(pasta):
@@ -60,61 +84,82 @@ def contar_pdfs_pasta(pasta):
         return 0
 
 
-def limpar_processos_chrome():
-    """Remove processos Chrome órfãos"""
+def verificar_processos_orfaos():
+    """Verifica se há processos Chrome órfãos"""
     try:
-        subprocess.run(["pkill", "-f", "chrome"], check=False, capture_output=True)
-        subprocess.run(["pkill", "-f", "chromedriver"], check=False, capture_output=True)
-        time.sleep(3)
-    except Exception:
-        pass
+        result = subprocess.run(["pgrep", "-f", "chrome"], capture_output=True, text=True)
+        return len(result.stdout.strip().split('\n')) > 1 if result.stdout.strip() else False
+    except:
+        return False
+
+
+def limpar_processos_chrome_inteligente():
+    """Remove processos Chrome órfãos apenas se necessário"""
+    if verificar_processos_orfaos():
+        st.info("🧹 Detectados processos órfãos, limpando...")
+        try:
+            subprocess.run(["pkill", "-f", "chrome"], check=False, capture_output=True, timeout=3)
+            subprocess.run(["pkill", "-f", "chromedriver"], check=False, capture_output=True, timeout=3)
+            time.sleep(0.5)  # Mínimo necessário
+        except Exception:
+            pass
+    else:
+        st.info("✅ Sem processos órfãos detectados")
 
 
 def iniciar_driver(headless=True):
-    # Limpar processos anteriores
-    limpar_processos_chrome()
+    # Limpar processos apenas se realmente necessário
+    limpar_processos_chrome_inteligente()
     
     options = webdriver.ChromeOptions()
     
-    # CONFIGURAÇÕES CRUCIAIS PARA DOWNLOAD AUTOMÁTICO DE PDFs
+    # CONFIGURAÇÕES OTIMIZADAS PARA DOWNLOAD RÁPIDO
     prefs = {
         "download.default_directory": output_folder,
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
-        "safebrowsing.enabled": True,
+        "safebrowsing.enabled": False,  # DESABILITA VERIFICAÇÃO DE SEGURANÇA
         "safebrowsing.disable_download_protection": True,
-        "plugins.always_open_pdf_externally": True,  # FORÇA DOWNLOAD AUTOMÁTICO
-        "plugins.plugins_disabled": ["Chrome PDF Viewer"],  # DESABILITA VISUALIZADOR
+        "plugins.always_open_pdf_externally": True,
+        "plugins.plugins_disabled": ["Chrome PDF Viewer"],
         "profile.default_content_settings.popups": 0,
-        "profile.default_content_setting_values.automatic_downloads": 1  # PERMITE MÚLTIPLOS DOWNLOADS
+        "profile.default_content_setting_values.automatic_downloads": 1,
+        "profile.managed_default_content_settings.images": 2,  # BLOQUEIA IMAGENS
+        "profile.default_content_setting_values.stylesheet": 2,  # BLOQUEIA CSS
     }
     options.add_experimental_option("prefs", prefs)
     
-    # Configurações essenciais para VM
+    # Configurações otimizadas para velocidade
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-web-security")
-    options.add_argument("--allow-running-insecure-content")
     options.add_argument("--disable-features=VizDisplayCompositor")
-    options.add_argument("--disable-background-timer-throttling")
-    options.add_argument("--disable-backgrounding-occluded-windows")
-    options.add_argument("--disable-popup-blocking")  # IMPORTANTE PARA DOWNLOADS AUTOMÁTICOS
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-images")  # BLOQUEIA IMAGENS
+    options.add_argument("--disable-javascript")  # PODE QUEBRAR - TESTE PRIMEIRO
+    options.add_argument("--disable-plugins")
+    options.add_argument("--disable-java")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--disable-sync")
+    options.add_argument("--disable-translate")
+    options.add_argument("--disable-default-apps")
+    options.add_argument("--no-first-run")
+    options.add_argument("--fast-start")
+    options.add_argument("--disable-logging")
     
-    # Configurações anti-detecção
+    # Anti-detecção otimizada
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
     
-    # Configurações de janela
-    options.add_argument("--window-size=1920,1080")
+    # Janela menor para economizar recursos
+    options.add_argument("--window-size=1280,720")
     
     if headless:
         options.add_argument("--headless")
-        st.info("🤖 Rodando em modo headless (sem interface)")
-    else:
-        st.info("🖥️ Rodando com interface gráfica")
+        st.info("🤖 Modo headless otimizado ativado")
     
     try:
         service = Service("/usr/local/bin/chromedriver")
@@ -122,11 +167,11 @@ def iniciar_driver(headless=True):
         
         driver = webdriver.Chrome(service=service, options=options)
         
-        # Timeouts mais generosos para VM
-        driver.implicitly_wait(20)
-        driver.set_page_load_timeout(60)
+        # Timeouts otimizados
+        driver.implicitly_wait(10)  # Reduzido de 20 para 10
+        driver.set_page_load_timeout(30)  # Reduzido de 60 para 30
         
-        # Configurações anti-detecção no JavaScript
+        # Configuração anti-detecção
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
         return driver
@@ -136,10 +181,13 @@ def iniciar_driver(headless=True):
         raise
 
 
-def fechar_abas_extras(driver, aba_principal):
-    """Fecha todas as abas exceto a principal"""
+def fechar_abas_extras_rapido(driver, aba_principal):
+    """Versão otimizada para fechar abas extras"""
     try:
         todas_abas = driver.window_handles
+        if len(todas_abas) <= 1:
+            return  # Só uma aba, não precisa fazer nada
+            
         for aba in todas_abas:
             if aba != aba_principal:
                 try:
@@ -148,17 +196,52 @@ def fechar_abas_extras(driver, aba_principal):
                 except:
                     pass
         driver.switch_to.window(aba_principal)
-    except Exception as e:
-        st.warning(f"Aviso: Erro ao fechar abas extras: {e}")
+    except Exception:
+        pass
+
+
+def processar_downloads_paciente(driver, botoes, paciente, monitor, aba_principal):
+    """Processa downloads de um paciente de forma otimizada"""
+    downloads_sucesso = 0
+    
+    for idx_botao, botao in enumerate(botoes):
+        try:
+            if not verificar_driver_ativo(driver):
+                st.error("❌ Driver perdeu conexão durante download")
+                break
+
+            st.info(f"📥 Download {idx_botao + 1}/{len(botoes)} - {paciente}")
+            
+            # Reset do monitor para este download
+            monitor.reset()
+            
+            # Click otimizado
+            driver.execute_script("arguments[0].click();", botao)
+            
+            # Aguarda download com timeout reduzido
+            if monitor.aguardar_download(timeout=10):  # Reduzido de 20 para 10 segundos
+                downloads_sucesso += 1
+                st.success(f"✅ Download {idx_botao + 1} concluído")
+            else:
+                st.warning(f"⚠️ Download {idx_botao + 1} pode ter falhado (timeout)")
+            
+            # Pausa mínima entre downloads
+            time.sleep(0.5)  # Reduzido de 3 para 0.5 segundos
+            
+        except Exception as e:
+            st.warning(f"Erro no download {idx_botao + 1}: {str(e)}")
+            continue
+    
+    return downloads_sucesso
 
 
 def executar_robo_fmabc():
-    st.subheader("⬇️ Download de exames")
+    st.subheader("⬇️ Download de exames - Versão Otimizada")
     
-    modo_headless = st.checkbox("🤖 Modo headless (recomendado para VM)", value=True)
+    modo_headless = st.checkbox("🤖 Modo headless (recomendado)", value=True)
     entrada_pacientes = st.text_area("Cole aqui os nomes dos pacientes (um por linha):")
 
-    if st.button("executar nephroghost"):
+    if st.button("🚀 Executar Nephroghost Otimizado"):
         # Configuração de pastas
         base_folder = "/home/karolinewac/tablab_abc/pdfs_abc"
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -166,189 +249,102 @@ def executar_robo_fmabc():
         output_folder = os.path.join(base_folder, timestamp)
         os.makedirs(output_folder, exist_ok=True)
 
+        # Inicializar monitor de downloads
+        monitor = DownloadMonitor(output_folder)
+
         driver = None
         try:
+            st.info("🚀 Iniciando navegador otimizado...")
             driver = iniciar_driver(headless=modo_headless)
 
-            st.info("🔗 Acessando site do laboratório...")
+            st.info("🔗 Acessando site...")
             driver.get("http://laboratorio.fmabc.br/matrixnet/wfrmBlank.aspx")
-            st.success("🌐 Navegador iniciado")
+            st.success("🌐 Site carregado")
 
-            # Login
+            # Login otimizado
             st.info("🔑 Fazendo login...")
-            WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.NAME, "userLogin")))
+            WebDriverWait(driver, 15).wait(EC.presence_of_element_located((By.NAME, "userLogin")))
             driver.find_element(By.NAME, "userLogin").send_keys("HOAN")
             driver.find_element(By.NAME, "userPassword").send_keys("5438")
             driver.find_element(By.ID, "btnEntrar").click()
             
-            # Aguardar login processar
-            time.sleep(8)
+            time.sleep(3)  # Reduzido de 8 para 3 segundos
             st.success("✅ Login realizado")
 
-            # Verificar se driver ainda está ativo após login
             if not verificar_driver_ativo(driver):
                 st.error("❌ Driver perdeu conexão após login")
                 return
 
-            st.info("🎯 Navegando para seção de exames...")
+            st.info("🎯 Navegando para exames...")
             
-            # Primeiro elemento - com retry
-            sucesso_primeiro = False
-            for tentativa in range(3):
-                try:
-                    if not verificar_driver_ativo(driver):
-                        st.error("❌ Driver inativo durante navegação")
-                        return
-                        
-                    element = WebDriverWait(driver, 20).until(
-                        EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))
-                    )
-                    driver.execute_script("arguments[0].click();", element)
-                    time.sleep(3)
-                    sucesso_primeiro = True
-                    st.success("✅ Primeiro elemento clicado")
-                    break
-                    
-                except Exception as e:
-                    st.warning(f"⚠️ Tentativa {tentativa + 1} falhou: {e}")
-                    if tentativa < 2:
-                        time.sleep(5)
-                    
-            if not sucesso_primeiro:
-                st.error("❌ Falha ao clicar no primeiro elemento após 3 tentativas")
-                return
-
-            # Segundo elemento - com retry
-            sucesso_segundo = False
-            for tentativa in range(3):
-                try:
-                    if not verificar_driver_ativo(driver):
-                        st.error("❌ Driver inativo durante segundo clique")
-                        return
-                        
-                    second_element = driver.find_element(By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25")
-                    driver.execute_script("arguments[0].click();", second_element)
-                    time.sleep(3)
-                    sucesso_segundo = True
-                    st.success("✅ Seção de exames acessada")
-                    break
-                    
-                except Exception as e:
-                    st.warning(f"⚠️ Segundo elemento - tentativa {tentativa + 1} falhou: {e}")
-                    if tentativa < 2:
-                        time.sleep(5)
-
-            if not sucesso_segundo:
-                st.error("❌ Falha ao acessar seção de exames")
+            # Navegação otimizada com timeouts reduzidos
+            try:
+                element = WebDriverWait(driver, 10).until(  # Reduzido de 20 para 10
+                    EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))
+                )
+                driver.execute_script("arguments[0].click();", element)
+                time.sleep(1)  # Reduzido de 3 para 1
+                
+                second_element = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25"))
+                )
+                driver.execute_script("arguments[0].click();", second_element)
+                time.sleep(1)  # Reduzido de 3 para 1
+                
+                st.success("✅ Navegação concluída")
+                
+            except Exception as e:
+                st.error(f"❌ Erro na navegação: {e}")
                 return
 
             # Processar pacientes
             nomes = [n.strip() for n in entrada_pacientes.strip().splitlines() if n.strip()]
             progresso = st.progress(0)
             total = len(nomes)
+            
+            st.info(f"📋 Processando {total} pacientes...")
 
             for idx, paciente in enumerate(nomes):
                 try:
-                    # Verificar driver antes de cada paciente
                     if not verificar_driver_ativo(driver):
-                        st.error(f"❌ Driver perdeu conexão durante processamento do paciente: {paciente}")
+                        st.error(f"❌ Driver perdeu conexão no paciente: {paciente}")
                         break
 
-                    st.write(f"🔍 Buscando paciente: {paciente}")
+                    st.write(f"🔍 Paciente: {paciente}")
                     aba_principal = driver.current_window_handle
 
-                    # Buscar paciente
-                    WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "textoDigitado")))
-                    campo = driver.find_element(By.ID, "textoDigitado")
+                    # Busca otimizada
+                    campo = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "textoDigitado")))
                     campo.clear()
                     campo.send_keys(paciente)
                     driver.find_element(By.XPATH, "//button[contains(., 'Pesquisar')]").click()
-                    time.sleep(5)
+                    time.sleep(2)  # Reduzido de 5 para 2
 
                     botoes = driver.find_elements(By.XPATH, "//button[contains(., 'Laudo Completo')]")
                     if not botoes:
                         st.warning(f"⚠️ Paciente não encontrado: {paciente}")
                         continue
 
-                    # Processar cada botão de laudo - DOWNLOAD AUTOMÁTICO
-                    for idx_botao, botao in enumerate(botoes):
-                        try:
-                            # Verificar driver antes de cada download
-                            if not verificar_driver_ativo(driver):
-                                st.error("❌ Driver perdeu conexão durante download")
-                                break
+                    # Processar downloads do paciente
+                    downloads = processar_downloads_paciente(driver, botoes, paciente, monitor, aba_principal)
+                    st.write(f"📥 {downloads}/{len(botoes)} downloads realizados para {paciente}")
 
-                            st.info(f"📥 Iniciando download {idx_botao + 1} para {paciente}")
-                            
-                            # Contar PDFs antes do clique
-                            pdfs_antes = contar_pdfs_pasta(output_folder)
-                            
-                            # SIMPLESMENTE CLICAR - Chrome baixará automaticamente
-                            driver.execute_script("arguments[0].click();", botao)
-                            
-                            # Aguardar o download automático processar
-                            st.info(f"⏳ Aguardando download automático...")
-                            
-                            # Aguardar download com verificação inteligente
-                            download_detectado = False
-                            for tentativa_wait in range(20):  # 40 segundos máximo
-                                time.sleep(2)
-                                
-                                # Verificar se apareceram novos PDFs
-                                pdfs_depois = contar_pdfs_pasta(output_folder)
-                                if pdfs_depois > pdfs_antes:
-                                    download_detectado = True
-                                    st.success(f"✅ Download {idx_botao + 1} detectado para {paciente}")
-                                    break
-                                
-                                # Verificar se ainda há downloads em progresso
-                                arquivos_temp = [f for f in os.listdir(output_folder) 
-                                               if f.endswith(('.crdownload', '.tmp', '.part'))]
-                                
-                                if tentativa_wait % 5 == 0:  # Log a cada 10 segundos
-                                    if arquivos_temp:
-                                        st.info(f"📥 Download em progresso... ({len(arquivos_temp)} arquivo(s) temporário(s))")
-                                    else:
-                                        st.info(f"⏳ Aguardando download iniciar... ({tentativa_wait * 2}s)")
-                            
-                            if not download_detectado:
-                                st.warning(f"⚠️ Download {idx_botao + 1} não detectado para {paciente} (pode ter falhado)")
-                            
-                            # Pequena pausa entre downloads
-                            time.sleep(3)
-                            
-                        except Exception as e:
-                            st.warning(f"Erro no download {idx_botao + 1} do paciente {paciente}: {str(e)}")
-                            continue
-
-                    # Não precisa limpar abas extras - Chrome gerencia automaticamente os downloads
+                    # Limpeza rápida de abas
+                    fechar_abas_extras_rapido(driver, aba_principal)
 
                 except Exception as e:
-                    st.warning(f"Erro geral no paciente {paciente}: {str(e)}")
-                    try:
-                        # Tentar manter driver funcional
-                        if verificar_driver_ativo(driver):
-                            aba_principal = driver.window_handles[0]
-                            fechar_abas_extras(driver, aba_principal)
-                    except:
-                        pass
+                    st.warning(f"Erro no paciente {paciente}: {str(e)}")
+                    continue
 
                 finally:
                     progresso.progress((idx + 1) / total)
 
-            st.success(f"✅ PDFs foram baixados para: {output_folder}")
+            # Resultado final
+            total_pdfs = contar_pdfs_pasta(output_folder)
+            st.success(f"✅ Concluído! {total_pdfs} PDFs baixados em: {output_folder}")
 
         except Exception as e:
             st.error(f"❌ Erro crítico: {str(e)}")
-            # Debug adicional
-            st.write(f"**Tipo do erro:** {type(e).__name__}")
-            try:
-                if driver and verificar_driver_ativo(driver):
-                    screenshot_path = os.path.join(output_folder, "erro_debug.png")
-                    driver.save_screenshot(screenshot_path)
-                    st.write(f"📸 Screenshot salvo em: {screenshot_path}")
-            except:
-                st.write("❌ Não foi possível capturar screenshot")
 
         finally:
             if driver:
@@ -357,7 +353,12 @@ def executar_robo_fmabc():
                 except:
                     pass
             
-            # Limpeza final
-            time.sleep(3)
-            limpar_processos_chrome()
-            st.write("✅ nephroghost finalizado")
+            # Limpeza final apenas se necessário
+            if verificar_processos_orfaos():
+                limpar_processos_chrome_inteligente()
+            st.write("✅ Nephroghost otimizado finalizado")
+
+
+# Para executar diretamente
+if __name__ == "__main__":
+    executar_robo_fmabc()

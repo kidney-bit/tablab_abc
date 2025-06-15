@@ -107,7 +107,7 @@ def limpar_processos_chrome_inteligente():
         st.info("✅ Sem processos órfãos detectados")
 
 
-def iniciar_driver(headless=True):
+def iniciar_driver(headless=True, output_folder=None):
     # Limpar processos apenas se realmente necessário
     limpar_processos_chrome_inteligente()
     
@@ -235,128 +235,167 @@ def processar_downloads_paciente(driver, botoes, paciente, monitor, aba_principa
     return downloads_sucesso
 
 
-def executar_robo_fmabc():
+def executar_downloads_automatico(nomes_pacientes, modo_headless=True):
+    """
+    Função para executar downloads de forma automática (chamada pelo app.py)
+    
+    Args:
+        nomes_pacientes (list): Lista de nomes dos pacientes
+        modo_headless (bool): Se deve executar em modo headless
+    
+    Returns:
+        str: Caminho da pasta onde os PDFs foram salvos
+    """
+    
+    # Configuração de pastas
+    base_folder = os.path.join(os.path.dirname(__file__), "pdfs_abc")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_folder = os.path.join(base_folder, timestamp)
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Inicializar monitor de downloads
+    monitor = DownloadMonitor(output_folder)
+
+    driver = None
+    try:
+        st.info("🚀 Iniciando navegador otimizado...")
+        driver = iniciar_driver(headless=modo_headless, output_folder=output_folder)
+
+        st.info("🔗 Acessando site...")
+        driver.get("http://laboratorio.fmabc.br/matrixnet/wfrmBlank.aspx")
+        st.success("🌐 Site carregado")
+
+        # Login otimizado
+        st.info("🔑 Fazendo login...")
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.NAME, "userLogin")))
+        driver.find_element(By.NAME, "userLogin").send_keys("HOAN")
+        driver.find_element(By.NAME, "userPassword").send_keys("5438")
+        driver.find_element(By.ID, "btnEntrar").click()
+        
+        time.sleep(3)  # Reduzido de 8 para 3 segundos
+        st.success("✅ Login realizado")
+
+        if not verificar_driver_ativo(driver):
+            st.error("❌ Driver perdeu conexão após login")
+            return None
+
+        st.info("🎯 Navegando para exames...")
+        
+        # Navegação otimizada com timeouts reduzidos
+        try:
+            element = WebDriverWait(driver, 10).until(  # Reduzido de 20 para 10
+                EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))
+            )
+            driver.execute_script("arguments[0].click();", element)
+            time.sleep(1)  # Reduzido de 3 para 1
+            
+            second_element = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25"))
+            )
+            driver.execute_script("arguments[0].click();", second_element)
+            time.sleep(1)  # Reduzido de 3 para 1
+            
+            st.success("✅ Navegação concluída")
+            
+        except Exception as e:
+            st.error(f"❌ Erro na navegação: {e}")
+            return None
+
+        # Processar pacientes
+        progresso = st.progress(0)
+        total = len(nomes_pacientes)
+        
+        st.info(f"📋 Processando {total} pacientes...")
+
+        for idx, paciente in enumerate(nomes_pacientes):
+            try:
+                if not verificar_driver_ativo(driver):
+                    st.error(f"❌ Driver perdeu conexão no paciente: {paciente}")
+                    break
+
+                st.write(f"🔍 Paciente: {paciente}")
+                aba_principal = driver.current_window_handle
+
+                # Busca otimizada
+                campo = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "textoDigitado")))
+                campo.clear()
+                campo.send_keys(paciente)
+                driver.find_element(By.XPATH, "//button[contains(., 'Pesquisar')]").click()
+                time.sleep(2)  # Reduzido de 5 para 2
+
+                botoes = driver.find_elements(By.XPATH, "//button[contains(., 'Laudo Completo')]")
+                if not botoes:
+                    st.warning(f"⚠️ Paciente não encontrado: {paciente}")
+                    continue
+
+                # Processar downloads do paciente
+                downloads = processar_downloads_paciente(driver, botoes, paciente, monitor, aba_principal)
+                st.write(f"📥 {downloads}/{len(botoes)} downloads realizados para {paciente}")
+
+                # Limpeza rápida de abas
+                fechar_abas_extras_rapido(driver, aba_principal)
+
+            except Exception as e:
+                st.warning(f"Erro no paciente {paciente}: {str(e)}")
+                continue
+
+            finally:
+                progresso.progress((idx + 1) / total)
+
+        # Resultado final
+        total_pdfs = contar_pdfs_pasta(output_folder)
+        st.success(f"✅ Concluído! {total_pdfs} PDFs baixados em: {output_folder}")
+        
+        return output_folder
+
+    except Exception as e:
+        st.error(f"❌ Erro crítico: {str(e)}")
+        return None
+
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
+        
+        # Limpeza final apenas se necessário
+        if verificar_processos_orfaos():
+            limpar_processos_chrome_inteligente()
+        st.write("✅ Nephroghost otimizado finalizado")
+
+
+def executar_robo_fmabc(nomes_pacientes=None):
+    """
+    Função principal que pode ser chamada tanto pela interface quanto programaticamente
+    
+    Args:
+        nomes_pacientes (list, optional): Lista de nomes. Se None, usa interface do Streamlit
+    """
+    
+    # Se recebeu lista de nomes, executa automaticamente
+    if nomes_pacientes is not None:
+        return executar_downloads_automatico(nomes_pacientes, modo_headless=True)
+    
+    # Caso contrário, mostra interface do Streamlit
     st.subheader("⬇️ Download de exames - Versão Otimizada")
     
     modo_headless = st.checkbox("🤖 Modo headless (recomendado)", value=True)
     entrada_pacientes = st.text_area("Cole aqui os nomes dos pacientes (um por linha):")
 
     if st.button("🚀 Executar Nephroghost Otimizado"):
-        # Configuração de pastas
-        base_folder = "/home/karolinewac/tablab_abc/pdfs_abc"
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        global output_folder
-        output_folder = os.path.join(base_folder, timestamp)
-        os.makedirs(output_folder, exist_ok=True)
-
-        # Inicializar monitor de downloads
-        monitor = DownloadMonitor(output_folder)
-
-        driver = None
-        try:
-            st.info("🚀 Iniciando navegador otimizado...")
-            driver = iniciar_driver(headless=modo_headless)
-
-            st.info("🔗 Acessando site...")
-            driver.get("http://laboratorio.fmabc.br/matrixnet/wfrmBlank.aspx")
-            st.success("🌐 Site carregado")
-
-            # Login otimizado
-            st.info("🔑 Fazendo login...")
-            WebDriverWait(driver, 15).wait(EC.presence_of_element_located((By.NAME, "userLogin")))
-            driver.find_element(By.NAME, "userLogin").send_keys("HOAN")
-            driver.find_element(By.NAME, "userPassword").send_keys("5438")
-            driver.find_element(By.ID, "btnEntrar").click()
-            
-            time.sleep(3)  # Reduzido de 8 para 3 segundos
-            st.success("✅ Login realizado")
-
-            if not verificar_driver_ativo(driver):
-                st.error("❌ Driver perdeu conexão após login")
-                return
-
-            st.info("🎯 Navegando para exames...")
-            
-            # Navegação otimizada com timeouts reduzidos
-            try:
-                element = WebDriverWait(driver, 10).until(  # Reduzido de 20 para 10
-                    EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))
-                )
-                driver.execute_script("arguments[0].click();", element)
-                time.sleep(1)  # Reduzido de 3 para 1
-                
-                second_element = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25"))
-                )
-                driver.execute_script("arguments[0].click();", second_element)
-                time.sleep(1)  # Reduzido de 3 para 1
-                
-                st.success("✅ Navegação concluída")
-                
-            except Exception as e:
-                st.error(f"❌ Erro na navegação: {e}")
-                return
-
-            # Processar pacientes
-            nomes = [n.strip() for n in entrada_pacientes.strip().splitlines() if n.strip()]
-            progresso = st.progress(0)
-            total = len(nomes)
-            
-            st.info(f"📋 Processando {total} pacientes...")
-
-            for idx, paciente in enumerate(nomes):
-                try:
-                    if not verificar_driver_ativo(driver):
-                        st.error(f"❌ Driver perdeu conexão no paciente: {paciente}")
-                        break
-
-                    st.write(f"🔍 Paciente: {paciente}")
-                    aba_principal = driver.current_window_handle
-
-                    # Busca otimizada
-                    campo = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "textoDigitado")))
-                    campo.clear()
-                    campo.send_keys(paciente)
-                    driver.find_element(By.XPATH, "//button[contains(., 'Pesquisar')]").click()
-                    time.sleep(2)  # Reduzido de 5 para 2
-
-                    botoes = driver.find_elements(By.XPATH, "//button[contains(., 'Laudo Completo')]")
-                    if not botoes:
-                        st.warning(f"⚠️ Paciente não encontrado: {paciente}")
-                        continue
-
-                    # Processar downloads do paciente
-                    downloads = processar_downloads_paciente(driver, botoes, paciente, monitor, aba_principal)
-                    st.write(f"📥 {downloads}/{len(botoes)} downloads realizados para {paciente}")
-
-                    # Limpeza rápida de abas
-                    fechar_abas_extras_rapido(driver, aba_principal)
-
-                except Exception as e:
-                    st.warning(f"Erro no paciente {paciente}: {str(e)}")
-                    continue
-
-                finally:
-                    progresso.progress((idx + 1) / total)
-
-            # Resultado final
-            total_pdfs = contar_pdfs_pasta(output_folder)
-            st.success(f"✅ Concluído! {total_pdfs} PDFs baixados em: {output_folder}")
-
-        except Exception as e:
-            st.error(f"❌ Erro crítico: {str(e)}")
-
-        finally:
-            if driver:
-                try:
-                    driver.quit()
-                except:
-                    pass
-            
-            # Limpeza final apenas se necessário
-            if verificar_processos_orfaos():
-                limpar_processos_chrome_inteligente()
-            st.write("✅ Nephroghost otimizado finalizado")
+        nomes = [n.strip() for n in entrada_pacientes.strip().splitlines() if n.strip()]
+        
+        if not nomes:
+            st.error("❌ Por favor, insira pelo menos um nome de paciente.")
+            return
+        
+        resultado = executar_downloads_automatico(nomes, modo_headless)
+        
+        if resultado:
+            st.success(f"✅ Downloads concluídos com sucesso! Pasta: {resultado}")
+        else:
+            st.error("❌ Erro durante a execução dos downloads.")
 
 
 # Para executar diretamente

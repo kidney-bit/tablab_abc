@@ -91,11 +91,58 @@ def executar_robo_fmabc():
             st.success("✅ Login realizado")
 
             st.info("🎯 Navegando para seção de exames...")
-            WebDriverWait(driver, 15).until(
-                EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))).click()
-            time.sleep(1)
-            driver.find_element(By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25").click()
-            st.success("✅ Seção de exames acessada")
+            
+            # Aguardar mais tempo após login e tentar múltiplas estratégias
+            time.sleep(5)  # Aguardar carregamento completo da página
+            
+            try:
+                # Estratégia 1: Aguardar mais tempo
+                element = WebDriverWait(driver, 30).until(
+                    EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))
+                )
+                element.click()
+                st.info("✅ Primeiro elemento clicado")
+                
+            except Exception as e:
+                st.warning(f"⚠️ Erro no primeiro elemento: {e}")
+                # Estratégia 2: Tentar encontrar por outros seletores
+                try:
+                    # Listar todos os elementos disponíveis para debug
+                    all_elements = driver.find_elements(By.XPATH, "//*[@id]")
+                    st.write(f"🔍 Encontrados {len(all_elements)} elementos com ID")
+                    
+                    # Procurar elementos que contenham parte do ID
+                    partial_elements = driver.find_elements(By.XPATH, "//*[contains(@id, '97-0B-E6')]")
+                    if partial_elements:
+                        st.info(f"✅ Encontrado elemento similar, tentando clicar...")
+                        partial_elements[0].click()
+                    else:
+                        st.error("❌ Elemento não encontrado mesmo com busca parcial")
+                        return
+                        
+                except Exception as e2:
+                    st.error(f"❌ Falha na estratégia alternativa: {e2}")
+                    return
+            
+            time.sleep(2)
+            
+            try:
+                driver.find_element(By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25").click()
+                st.success("✅ Seção de exames acessada")
+            except Exception as e:
+                st.warning(f"⚠️ Erro no segundo elemento: {e}")
+                # Tentar estratégia similar para o segundo elemento
+                try:
+                    partial_elements2 = driver.find_elements(By.XPATH, "//*[contains(@id, 'A1-2C-C6')]")
+                    if partial_elements2:
+                        partial_elements2[0].click()
+                        st.success("✅ Seção de exames acessada (método alternativo)")
+                    else:
+                        st.error("❌ Segundo elemento também não encontrado")
+                        return
+                except Exception as e3:
+                    st.error(f"❌ Falha total na navegação: {e3}")
+                    return
 
             nomes = [n.strip() for n in entrada_pacientes.strip().splitlines() if n.strip()]
             progresso = st.progress(0)

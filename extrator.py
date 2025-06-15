@@ -68,7 +68,9 @@ def extrair_exames_dos_pdfs(pasta):
 
 def executar_extrator_tabelado(pasta_manual=None):
     st.subheader("📊 Extração de exames")
-    pasta_padrao = "/Users/kwayla/myp/tablab_abc/tablab_abc/pdfs_abc"
+    
+    # ✅ Caminho ajustado para Linux (VM)
+    pasta_padrao = "/home/karolinewac/tablab_abc/pdfs_abc"
 
     if pasta_manual:
         df = extrair_exames_dos_pdfs(pasta_manual)

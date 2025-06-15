@@ -12,6 +12,7 @@ import time
 import os
 import tempfile
 import shutil
+import uuid
 
 def executar_robo_fmabc():
     st.subheader("⬇️ Download de exames")
@@ -38,11 +39,10 @@ def executar_robo_fmabc():
             options.add_argument("--disable-gpu")
             options.add_argument("--disable-extensions")
 
-            # Gera um diretório de perfil único a cada execução
-            profile_path = tempfile.mkdtemp(prefix="chrome_profile_")
+            # Gera um diretório de perfil único usando UUID
+            profile_path = f"/tmp/chrome_profile_{uuid.uuid4().hex}"
             options.add_argument(f"--user-data-dir={profile_path}")
 
-            # Caminho do chromedriver do Snap
             service = Service("/snap/chromium/3169/usr/lib/chromium-browser/chromedriver")
             driver = webdriver.Chrome(service=service, options=options)
             return driver, profile_path

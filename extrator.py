@@ -32,8 +32,16 @@ def extrair_nome(texto):
     return match.group(1).strip().title() if match else "Paciente Desconhecido"
 
 def extrair_data_amostra(texto):
-    match = re.search(r"Amostra recebida em:\s*(\d{2}/\d{2}/\d{4})", texto)
-    return match.group(1) if match else ""
+    match = re.search(r"Amostra recebida em:\s*(\d{2}/\d{2}/\d{4})\s+as\s+(\d{2})h\s+(\d{2})min", texto)
+    if match:
+        data_str = match.group(1)
+        hora = match.group(2)
+        minuto = match.group(3)
+        try:
+            return datetime.strptime(f"{data_str} {hora}:{minuto}", "%d/%m/%Y %H:%M")
+        except ValueError:
+            return None
+    return None
 
 def extrair_valores(texto, padroes):
     resultados = {}
@@ -63,13 +71,12 @@ def extrair_exames_dos_pdfs(pasta):
             except Exception:
                 continue
     df = pd.DataFrame(registros)
-    df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
-    return df[df["Data"].notna()]
+    df = df[df["Data"].notna()]
+    return df
 
 def executar_extrator_tabelado(pasta_manual=None):
     st.subheader("📊 Extração de exames")
     
-    # ✅ Caminho ajustado para Linux (VM)
     pasta_padrao = "/home/karolinewac/tablab_abc/pdfs_abc"
 
     if pasta_manual:
@@ -78,7 +85,6 @@ def executar_extrator_tabelado(pasta_manual=None):
             st.session_state["df_exames"] = df
         return df
 
-    # Interface interativa
     subpastas = sorted([f.name for f in os.scandir(pasta_padrao) if f.is_dir()], reverse=True)
 
     if not subpastas:

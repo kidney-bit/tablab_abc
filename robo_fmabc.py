@@ -24,19 +24,40 @@ def verificar_driver_ativo(driver):
 
 
 def aguardar_download_completo(pasta_download, timeout=30):
-    """Aguarda todos os downloads completarem"""
+    """Aguarda todos os downloads completarem - versão melhorada"""
     inicio = time.time()
+    arquivos_iniciais = set(os.listdir(pasta_download))
+    
     while time.time() - inicio < timeout:
-        # Verifica arquivos .crdownload (Chrome) e .tmp (temporários)
-        arquivos_temporarios = (
-            glob.glob(os.path.join(pasta_download, "*.crdownload")) +
-            glob.glob(os.path.join(pasta_download, "*.tmp"))
-        )
-        if not arquivos_temporarios:
-            time.sleep(2)  # Aguarda um pouco mais para garantir
-            return True
+        try:
+            arquivos_atuais = set(os.listdir(pasta_download))
+            
+            # Verifica arquivos temporários
+            arquivos_temporarios = [f for f in arquivos_atuais if f.endswith(('.crdownload', '.tmp', '.part'))]
+            
+            # Se não há arquivos temporários E há arquivos novos, download completo
+            if not arquivos_temporarios and len(arquivos_atuais) > len(arquivos_iniciais):
+                time.sleep(2)  # Aguarda mais um pouco para garantir
+                return True
+                
+            # Se não há arquivos temporários há mais de 10 segundos, considera completo
+            if not arquivos_temporarios and time.time() - inicio > 10:
+                return True
+                
+        except Exception as e:
+            st.warning(f"Erro ao verificar downloads: {e}")
+            
         time.sleep(1)
+    
     return False
+
+
+def contar_pdfs_pasta(pasta):
+    """Conta arquivos PDF na pasta"""
+    try:
+        return len([f for f in os.listdir(pasta) if f.lower().endswith('.pdf')])
+    except:
+        return 0
 
 
 def limpar_processos_chrome():
@@ -54,12 +75,18 @@ def iniciar_driver(headless=True):
     limpar_processos_chrome()
     
     options = webdriver.ChromeOptions()
+    
+    # CONFIGURAÇÕES CRUCIAIS PARA DOWNLOAD AUTOMÁTICO DE PDFs
     prefs = {
         "download.default_directory": output_folder,
         "download.prompt_for_download": False,
-        "plugins.always_open_pdf_externally": True,
         "download.directory_upgrade": True,
-        "safebrowsing.enabled": True
+        "safebrowsing.enabled": True,
+        "safebrowsing.disable_download_protection": True,
+        "plugins.always_open_pdf_externally": True,  # FORÇA DOWNLOAD AUTOMÁTICO
+        "plugins.plugins_disabled": ["Chrome PDF Viewer"],  # DESABILITA VISUALIZADOR
+        "profile.default_content_settings.popups": 0,
+        "profile.default_content_setting_values.automatic_downloads": 1  # PERMITE MÚLTIPLOS DOWNLOADS
     }
     options.add_experimental_option("prefs", prefs)
     
@@ -73,6 +100,7 @@ def iniciar_driver(headless=True):
     options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--disable-background-timer-throttling")
     options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-popup-blocking")  # IMPORTANTE PARA DOWNLOADS AUTOMÁTICOS
     
     # Configurações anti-detecção
     options.add_argument("--disable-blink-features=AutomationControlled")
@@ -242,7 +270,7 @@ def executar_robo_fmabc():
                         st.warning(f"⚠️ Paciente não encontrado: {paciente}")
                         continue
 
-                    # Processar cada botão de laudo
+                    # Processar cada botão de laudo - DOWNLOAD AUTOMÁTICO
                     for idx_botao, botao in enumerate(botoes):
                         try:
                             # Verificar driver antes de cada download
@@ -250,43 +278,50 @@ def executar_robo_fmabc():
                                 st.error("❌ Driver perdeu conexão durante download")
                                 break
 
-                            abas_antes = driver.window_handles[:]
+                            st.info(f"📥 Iniciando download {idx_botao + 1} para {paciente}")
                             
-                            # Clicar no botão
+                            # Contar PDFs antes do clique
+                            pdfs_antes = contar_pdfs_pasta(output_folder)
+                            
+                            # SIMPLESMENTE CLICAR - Chrome baixará automaticamente
                             driver.execute_script("arguments[0].click();", botao)
                             
-                            # Aguardar nova aba aparecer
-                            try:
-                                WebDriverWait(driver, 15).until(lambda d: len(d.window_handles) > len(abas_antes))
-                                nova_aba = [t for t in driver.window_handles if t not in abas_antes][0]
+                            # Aguardar o download automático processar
+                            st.info(f"⏳ Aguardando download automático...")
+                            
+                            # Aguardar download com verificação inteligente
+                            download_detectado = False
+                            for tentativa_wait in range(20):  # 40 segundos máximo
+                                time.sleep(2)
                                 
-                                # Mudar para nova aba
-                                driver.switch_to.window(nova_aba)
-                                time.sleep(5)
+                                # Verificar se apareceram novos PDFs
+                                pdfs_depois = contar_pdfs_pasta(output_folder)
+                                if pdfs_depois > pdfs_antes:
+                                    download_detectado = True
+                                    st.success(f"✅ Download {idx_botao + 1} detectado para {paciente}")
+                                    break
                                 
-                                # Aguardar download completar
-                                if not aguardar_download_completo(output_folder, timeout=30):
-                                    st.warning(f"⚠️ Timeout no download do paciente {paciente}")
+                                # Verificar se ainda há downloads em progresso
+                                arquivos_temp = [f for f in os.listdir(output_folder) 
+                                               if f.endswith(('.crdownload', '.tmp', '.part'))]
                                 
-                                # Fechar aba e voltar para principal
-                                driver.close()
-                                driver.switch_to.window(aba_principal)
-                                
-                            except TimeoutException:
-                                st.warning(f"⚠️ Nova aba não abriu para {paciente} - botão {idx_botao + 1}")
-                                # Garantir que estamos na aba principal
-                                driver.switch_to.window(aba_principal)
-
+                                if tentativa_wait % 5 == 0:  # Log a cada 10 segundos
+                                    if arquivos_temp:
+                                        st.info(f"📥 Download em progresso... ({len(arquivos_temp)} arquivo(s) temporário(s))")
+                                    else:
+                                        st.info(f"⏳ Aguardando download iniciar... ({tentativa_wait * 2}s)")
+                            
+                            if not download_detectado:
+                                st.warning(f"⚠️ Download {idx_botao + 1} não detectado para {paciente} (pode ter falhado)")
+                            
+                            # Pequena pausa entre downloads
+                            time.sleep(3)
+                            
                         except Exception as e:
                             st.warning(f"Erro no download {idx_botao + 1} do paciente {paciente}: {str(e)}")
-                            try:
-                                # Tentar voltar para aba principal
-                                fechar_abas_extras(driver, aba_principal)
-                            except:
-                                pass
+                            continue
 
-                    # Limpar abas extras após cada paciente
-                    fechar_abas_extras(driver, aba_principal)
+                    # Não precisa limpar abas extras - Chrome gerencia automaticamente os downloads
 
                 except Exception as e:
                     st.warning(f"Erro geral no paciente {paciente}: {str(e)}")

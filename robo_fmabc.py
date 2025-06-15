@@ -18,8 +18,6 @@ def executar_robo_fmabc():
     entrada_pacientes = st.text_area("Cole aqui os nomes dos pacientes (um por linha):")
 
     if st.button("executar nephroghost"):
-        # ⚠️ REMOVIDO caffeinate (não existe no Linux)
-
         # ✅ Caminho adaptado para VM
         base_folder = "/home/karolinewac/tablab_abc/pdfs_abc"
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -39,10 +37,12 @@ def executar_robo_fmabc():
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-gpu")
             options.add_argument("--disable-extensions")
-            profile_path = tempfile.mkdtemp()
+
+            # Gera um diretório de perfil único a cada execução
+            profile_path = tempfile.mkdtemp(prefix="chrome_profile_")
             options.add_argument(f"--user-data-dir={profile_path}")
 
-            # ✅ Caminho do chromedriver adaptado para VM
+            # Caminho do chromedriver do Snap
             service = Service("/snap/chromium/3169/usr/lib/chromium-browser/chromedriver")
             driver = webdriver.Chrome(service=service, options=options)
             return driver, profile_path

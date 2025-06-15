@@ -11,7 +11,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-CAMINHO_CREDENCIAIS = "/Users/kwayla/myp/tablab_abc/tablab_abc/tablab-abc-dd3a8b70d927.json"
+# 🔧 Caminho corrigido para rodar na sua VM Linux
+CAMINHO_CREDENCIAIS = "/home/karolinewac/tablab-abc-dd3a8b70d927.json"
 
 ABAS_IGNORADAS = ["CENSO AUTOMÁTICO", "Modelo - Evoluções", "Modelo"]
 

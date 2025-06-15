@@ -79,18 +79,23 @@ def executar_robo_fmabc():
         driver = iniciar_driver(headless=modo_headless)
 
         try:
+            st.info("🔗 Acessando site do laboratório...")
             driver.get("http://laboratorio.fmabc.br/matrixnet/wfrmBlank.aspx")
             st.success("🌐 Navegador iniciado")
 
+            st.info("🔑 Fazendo login...")
             WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.NAME, "userLogin")))
             driver.find_element(By.NAME, "userLogin").send_keys("HOAN")
             driver.find_element(By.NAME, "userPassword").send_keys("5438")
             driver.find_element(By.ID, "btnEntrar").click()
+            st.success("✅ Login realizado")
 
+            st.info("🎯 Navegando para seção de exames...")
             WebDriverWait(driver, 15).until(
                 EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))).click()
             time.sleep(1)
             driver.find_element(By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25").click()
+            st.success("✅ Seção de exames acessada")
 
             nomes = [n.strip() for n in entrada_pacientes.strip().splitlines() if n.strip()]
             progresso = st.progress(0)
@@ -155,7 +160,18 @@ def executar_robo_fmabc():
             st.success(f"✅ PDFs foram baixados para: {output_folder}")
 
         except Exception as e:
-            st.error(f"❌ Erro inesperado: {e}")
+            st.error(f"❌ Erro inesperado na linha {e.__traceback__.tb_lineno}: {str(e)}")
+            # Debug adicional
+            st.write(f"**Tipo do erro:** {type(e).__name__}")
+            if hasattr(e, 'msg'):
+                st.write(f"**Mensagem detalhada:** {e.msg}")
+            # Capturar screenshot se possível
+            try:
+                screenshot_path = os.path.join(output_folder, "erro_debug.png")
+                driver.save_screenshot(screenshot_path)
+                st.write(f"📸 Screenshot salvo em: {screenshot_path}")
+            except:
+                st.write("❌ Não foi possível capturar screenshot")
 
         finally:
             driver.quit()

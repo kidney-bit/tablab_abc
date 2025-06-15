@@ -1,4 +1,4 @@
-# robo_fmabc.py - Atualizado para integração com app.py
+# robo_fmabc.py - Versão corrigida para VM
 
 import streamlit as st
 from selenium import webdriver
@@ -10,61 +10,84 @@ from selenium.common.exceptions import WebDriverException
 from datetime import datetime
 import time
 import os
-import tempfile
-import shutil
-import uuid
+import subprocess
+
+
+def iniciar_driver(headless=True):
+    options = webdriver.ChromeOptions()
+    prefs = {
+        "download.default_directory": output_folder,
+        "download.prompt_for_download": False,
+        "plugins.always_open_pdf_externally": True
+    }
+    options.add_experimental_option("prefs", prefs)
+    
+    # Configurações anti-detecção (mais importantes que headless)
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    options.add_argument("--disable-web-security")
+    
+    # Configurações essenciais para VM
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    
+    # Headless opcional
+    if headless:
+        options.add_argument("--headless")
+        st.info("🤖 Rodando em modo headless (sem interface)")
+    else:
+        options.add_argument("--start-maximized")
+        st.info("🖥️ Rodando com interface gráfica")
+    
+    # Matar processos Chrome anteriores
+    try:
+        subprocess.run(["pkill", "-f", "chrome"], check=False)
+        time.sleep(2)
+    except:
+        pass
+    
+    service = Service("/usr/local/bin/chromedriver")
+    options.binary_location = "/usr/bin/google-chrome"
+    
+    driver = webdriver.Chrome(service=service, options=options)
+    
+    # Configurações anti-detecção no JavaScript
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    
+    return driver
 
 
 def executar_robo_fmabc():
     st.subheader("⬇️ Download de exames")
+    
+    # Opção para o usuário escolher o modo
+    modo_headless = st.checkbox("🤖 Modo headless (recomendado para VM)", value=True)
+    
     entrada_pacientes = st.text_area("Cole aqui os nomes dos pacientes (um por linha):")
 
     if st.button("executar nephroghost"):
         # ✅ Caminho adaptado para VM
         base_folder = "/home/karolinewac/tablab_abc/pdfs_abc"
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        global output_folder
         output_folder = os.path.join(base_folder, timestamp)
         os.makedirs(output_folder, exist_ok=True)
 
-        def iniciar_driver():
-            options = webdriver.ChromeOptions()
-            prefs = {
-                "download.default_directory": output_folder,
-                "download.prompt_for_download": False,
-                "plugins.always_open_pdf_externally": True
-            }
-            options.add_experimental_option("prefs", prefs)
-            options.add_argument("--start-maximized")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--disable-extensions")
-
-            # Garante limpeza anterior e gera um diretório de perfil único usando UUID
-            profile_path = f"/tmp/chrome_profile_{uuid.uuid4().hex}"
-            if os.path.exists(profile_path):
-                shutil.rmtree(profile_path, ignore_errors=True)
-            options.add_argument(f"--user-data-dir={profile_path}")
-
-            # Novo caminho do chromedriver e chrome instalado via .deb
-            service = Service("/usr/local/bin/chromedriver")
-            options.binary_location = "/usr/bin/google-chrome"
-
-            driver = webdriver.Chrome(service=service, options=options)
-            return driver, profile_path
-
-        driver, profile_path = iniciar_driver()
+        driver = iniciar_driver(headless=modo_headless)
 
         try:
             driver.get("http://laboratorio.fmabc.br/matrixnet/wfrmBlank.aspx")
             st.success("🌐 Navegador iniciado")
 
-            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, "userLogin")))
+            WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.NAME, "userLogin")))
             driver.find_element(By.NAME, "userLogin").send_keys("HOAN")
             driver.find_element(By.NAME, "userPassword").send_keys("5438")
             driver.find_element(By.ID, "btnEntrar").click()
 
-            WebDriverWait(driver, 10).until(
+            WebDriverWait(driver, 15).until(
                 EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))).click()
             time.sleep(1)
             driver.find_element(By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25").click()
@@ -78,7 +101,7 @@ def executar_robo_fmabc():
                     st.write(f"🔍 Buscando paciente: {paciente}")
                     aba_principal = driver.current_window_handle
 
-                    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "textoDigitado")))
+                    WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "textoDigitado")))
                     campo = driver.find_element(By.ID, "textoDigitado")
                     campo.clear()
                     campo.send_keys(paciente)
@@ -94,13 +117,14 @@ def executar_robo_fmabc():
                         try:
                             original_tabs = driver.window_handles
                             driver.execute_script("arguments[0].click();", botao)
-                            WebDriverWait(driver, 10).until(lambda d: len(d.window_handles) > len(original_tabs))
+                            WebDriverWait(driver, 15).until(lambda d: len(d.window_handles) > len(original_tabs))
                             nova_aba = [t for t in driver.window_handles if t not in original_tabs][0]
 
                             driver.switch_to.window(nova_aba)
-                            time.sleep(2)
+                            time.sleep(3)
 
-                            timeout = time.time() + 15
+                            # Aguardar download finalizar
+                            timeout = time.time() + 20
                             while True:
                                 crdownloads = [f for f in os.listdir(output_folder) if f.endswith(".crdownload")]
                                 if not crdownloads or time.time() > timeout:
@@ -110,9 +134,11 @@ def executar_robo_fmabc():
                             driver.close()
                             driver.switch_to.window(aba_principal)
 
-                        except:
-                            if len(driver.window_handles) > 0:
+                        except Exception as e:
+                            st.warning(f"Erro no download: {str(e)}")
+                            if len(driver.window_handles) > 1:
                                 try:
+                                    driver.close()
                                     driver.switch_to.window(aba_principal)
                                 except:
                                     pass
@@ -120,7 +146,8 @@ def executar_robo_fmabc():
 
                     driver.switch_to.window(aba_principal)
 
-                except WebDriverException:
+                except WebDriverException as e:
+                    st.warning(f"Erro na busca do paciente {paciente}: {str(e)}")
                     continue
                 finally:
                     progresso.progress((idx + 1) / total)
@@ -133,5 +160,4 @@ def executar_robo_fmabc():
         finally:
             driver.quit()
             time.sleep(2)
-            shutil.rmtree(profile_path, ignore_errors=True)
             st.write("✅ nephroghost finalizado")

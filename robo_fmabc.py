@@ -14,6 +14,7 @@ import tempfile
 import shutil
 import uuid
 
+
 def executar_robo_fmabc():
     st.subheader("⬇️ Download de exames")
     entrada_pacientes = st.text_area("Cole aqui os nomes dos pacientes (um por linha):")
@@ -39,8 +40,10 @@ def executar_robo_fmabc():
             options.add_argument("--disable-gpu")
             options.add_argument("--disable-extensions")
 
-            # Gera um diretório de perfil único usando UUID
+            # Garante limpeza anterior e gera um diretório de perfil único usando UUID
             profile_path = f"/tmp/chrome_profile_{uuid.uuid4().hex}"
+            if os.path.exists(profile_path):
+                shutil.rmtree(profile_path, ignore_errors=True)
             options.add_argument(f"--user-data-dir={profile_path}")
 
             service = Service("/snap/chromium/3169/usr/lib/chromium-browser/chromedriver")
@@ -126,5 +129,6 @@ def executar_robo_fmabc():
 
         finally:
             driver.quit()
+            time.sleep(2)
             shutil.rmtree(profile_path, ignore_errors=True)
             st.write("✅ nephroghost finalizado")

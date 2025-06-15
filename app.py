@@ -1,10 +1,11 @@
-# app.py - Integra robô de download, extração de exames e envio ao Google Sheets
+# app.py - Versão corrigida para chamada direta da automação
 
 import streamlit as st
 import os
 from datetime import datetime
 
-from robo_fmabc import executar_robo_fmabc
+# Alteração 1: Importar a função específica de automação diretamente
+from robo_fmabc import executar_robo_fmabc, executar_downloads_automatico
 from extrator import executar_extrator_tabelado
 from escrivao import enviar_para_google_sheets
 
@@ -21,6 +22,7 @@ aba = st.sidebar.radio("Escolha a funcionalidade:", [
 
 # Funcionalidades separadas
 if aba == "⬇️ Baixar PDFs":
+    # Esta parte continua igual, usando a função original
     executar_robo_fmabc()
 
 elif aba == "📊 Extrair exames dos PDFs":
@@ -74,8 +76,11 @@ elif aba == "🤖 Rodar tudo (automático)":
             st.info("🔽 Passo 1: Baixando PDFs de todos os exames disponíveis...")
             lista_nomes = [nome.strip() for nome in nomes.strip().splitlines() if nome.strip()]
             
-            # Chama a função com a lista de nomes
-            pasta_downloads = executar_robo_fmabc(nomes_pacientes=lista_nomes)
+            # Alteração 2: Chamar a função de automação diretamente
+            pasta_downloads = executar_downloads_automatico(
+                nomes_pacientes=lista_nomes,
+                modo_headless=True
+            )
             
             if not pasta_downloads:
                 st.error("❌ Falha no download dos PDFs.")

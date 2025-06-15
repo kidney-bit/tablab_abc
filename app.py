@@ -1,10 +1,10 @@
-# app.py - Versão corrigida para chamada direta da automação
+# app.py - Versão final e corrigida
 
 import streamlit as st
 import os
 from datetime import datetime
 
-# Alteração 1: Importar a função específica de automação diretamente
+# Importa as duas funções necessárias de robo_fmabc
 from robo_fmabc import executar_robo_fmabc, executar_downloads_automatico
 from extrator import executar_extrator_tabelado
 from escrivao import enviar_para_google_sheets
@@ -20,9 +20,10 @@ aba = st.sidebar.radio("Escolha a funcionalidade:", [
     "🤖 Rodar tudo (automático)"
 ])
 
-# Funcionalidades separadas
+# --- Funcionalidades separadas ---
+
+# A aba "Baixar PDFs" continua usando a função original para renderizar a UI
 if aba == "⬇️ Baixar PDFs":
-    # Esta parte continua igual, usando a função original
     executar_robo_fmabc()
 
 elif aba == "📊 Extrair exames dos PDFs":
@@ -31,8 +32,13 @@ elif aba == "📊 Extrair exames dos PDFs":
 elif aba == "📤 Enviar exames para o Censo":
     if "df_exames" in st.session_state:
         url = st.text_input("📎 Cole aqui o link da planilha do Google Sheets:")
-        datas_unicas = sorted(st.session_state["df_exames"]["Data"].dropna().unique())
-        datas_selecionadas = st.multiselect("📆 Selecione as datas a enviar:", options=datas_unicas)
+        # Garante que a coluna 'Data' exista antes de tentar acessá-la
+        if "Data" in st.session_state["df_exames"].columns:
+            datas_unicas = sorted(st.session_state["df_exames"]["Data"].dropna().unique())
+            datas_selecionadas = st.multiselect("📆 Selecione as datas a enviar:", options=datas_unicas)
+        else:
+            datas_selecionadas = []
+            st.warning("Coluna 'Data' não encontrada nos exames extraídos.")
 
         if st.button("🚀 Enviar para o Censo"):
             progresso = st.progress(0)
@@ -50,7 +56,8 @@ elif aba == "📤 Enviar exames para o Censo":
     else:
         st.warning("Nenhum exame extraído ainda. Por favor, realize a extração primeiro.")
 
-# Execução automatizada
+# --- Execução automatizada ---
+
 elif aba == "🤖 Rodar tudo (automático)":
     st.markdown("### 🤖 Execução Automatizada Completa")
     st.info("Esta opção executa todo o fluxo: download → extração → envio ao Google Sheets")
@@ -76,7 +83,7 @@ elif aba == "🤖 Rodar tudo (automático)":
             st.info("🔽 Passo 1: Baixando PDFs de todos os exames disponíveis...")
             lista_nomes = [nome.strip() for nome in nomes.strip().splitlines() if nome.strip()]
             
-            # Alteração 2: Chamar a função de automação diretamente
+            # ✅ CORREÇÃO: Chamando a função de automação diretamente
             pasta_downloads = executar_downloads_automatico(
                 nomes_pacientes=lista_nomes,
                 modo_headless=True
@@ -120,4 +127,4 @@ elif aba == "🤖 Rodar tudo (automático)":
 
         except Exception as e:
             st.error(f"❌ Erro durante execução: {e}")
-            st.exception(e)  # Para debug, mostra o stack trace completo
+            st.exception(e)

@@ -19,7 +19,6 @@ def executar_robo_fmabc():
 
     if st.button("executar nephroghost"):
         # ⚠️ REMOVIDO caffeinate (não existe no Linux)
-        # caffeinate = subprocess.Popen(["caffeinate"])
 
         # ✅ Caminho adaptado para VM
         base_folder = "/home/karolinewac/tablab_abc/pdfs_abc"
@@ -28,29 +27,23 @@ def executar_robo_fmabc():
         os.makedirs(output_folder, exist_ok=True)
 
         def iniciar_driver():
-    options = webdriver.ChromeOptions()
-
-    profile_path = tempfile.mkdtemp(prefix="chrome_profile_")
-    
-    prefs = {
-        "download.default_directory": output_folder,
-        "download.prompt_for_download": False,
-        "plugins.always_open_pdf_externally": True
-    }
-    options.add_experimental_option("prefs", prefs)
-    options.add_argument("--start-maximized")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-extensions")
-    options.add_argument(f"--user-data-dir={profile_path}")
-
-    service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
-    driver = webdriver.Chrome(service=service, options=options)
-    return driver, profile_path
+            options = webdriver.ChromeOptions()
+            prefs = {
+                "download.default_directory": output_folder,
+                "download.prompt_for_download": False,
+                "plugins.always_open_pdf_externally": True
+            }
+            options.add_experimental_option("prefs", prefs)
+            options.add_argument("--start-maximized")
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--disable-extensions")
+            profile_path = tempfile.mkdtemp()
+            options.add_argument(f"--user-data-dir={profile_path}")
 
             # ✅ Caminho do chromedriver adaptado para VM
-            service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
+            service = Service("/snap/chromium/3169/usr/lib/chromium-browser/chromedriver")
             driver = webdriver.Chrome(service=service, options=options)
             return driver, profile_path
 
@@ -134,5 +127,4 @@ def executar_robo_fmabc():
         finally:
             driver.quit()
             shutil.rmtree(profile_path, ignore_errors=True)
-            # caffeinate.terminate()  # ⚠️ REMOVIDO
             st.write("✅ nephroghost finalizado")

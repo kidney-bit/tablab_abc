@@ -46,7 +46,10 @@ def executar_robo_fmabc():
                 shutil.rmtree(profile_path, ignore_errors=True)
             options.add_argument(f"--user-data-dir={profile_path}")
 
-            service = Service("/snap/chromium/3169/usr/lib/chromium-browser/chromedriver")
+            # Novo caminho do chromedriver e chrome instalado via .deb
+            service = Service("/usr/local/bin/chromedriver")
+            options.binary_location = "/usr/bin/google-chrome"
+
             driver = webdriver.Chrome(service=service, options=options)
             return driver, profile_path
 

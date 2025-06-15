@@ -68,7 +68,7 @@ elif aba == "🤖 Rodar tudo (automático)":
 
             # 2. Identificar última pasta e extrair exames
             with st.spinner("📄 Passo 2: Extraindo exames da pasta mais recente..."):
-                pasta_base = "/Users/kwayla/myp/tablab_abc/tablab_abc/pdfs_abc"
+                pasta_base = os.path.join(os.path.dirname(__file__), "pdfs_abc")
                 subpastas = sorted(
                     [f for f in os.listdir(pasta_base) if os.path.isdir(os.path.join(pasta_base, f))],
                     reverse=True

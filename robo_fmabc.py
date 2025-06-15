@@ -44,7 +44,7 @@ def executar_robo_fmabc():
             options.add_argument(f"--user-data-dir={profile_path}")
 
             # ✅ Caminho do chromedriver adaptado para VM
-            service = Service("/home/karolinewac/tablab_abc/chromedriver")
+            service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
             driver = webdriver.Chrome(service=service, options=options)
             return driver, profile_path
 

@@ -110,10 +110,10 @@ def executar_extrator_tabelado(pasta_manual=None):
         st.markdown("---")
         st.markdown("### 🔍 Filtros")
 
-        hoje = pd.to_datetime(datetime.now().date())
-        data_ref = st.date_input("Escolha a data de referência para o filtro:", value=hoje).to_pydatetime()
+        hoje = datetime.now().date()
+        data_ref = st.date_input("Escolha a data de referência para o filtro:", value=hoje)
+        data_véspera = pd.to_datetime(data_ref - timedelta(days=1))
         data_ref = pd.to_datetime(data_ref)
-        data_véspera = data_ref - timedelta(days=1)
 
         hora_corte = pd.to_timedelta("11:30:00")
         filtro = (

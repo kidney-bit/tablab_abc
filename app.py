@@ -29,8 +29,7 @@ elif aba == "📊 Extrair exames dos PDFs":
 elif aba == "📤 Enviar exames para o Censo":
     if "df_exames" in st.session_state:
         url = st.text_input("📎 Cole aqui o link da planilha do Google Sheets:")
-        datas_unicas = sorted(st.session_state["df_exames"]["Data"].dropna().unique())
-        datas_selecionadas = st.multiselect("📆 Selecione as datas a enviar:", options=datas_unicas)
+        data_escolhida = st.date_input("📆 Escolha a data de referência (para incluir também exames de ontem após 11h30):")
 
         if st.button("🚀 Enviar para o Censo"):
             progresso = st.progress(0)
@@ -38,7 +37,7 @@ elif aba == "📤 Enviar exames para o Censo":
                 sucesso = enviar_para_google_sheets(
                     st.session_state["df_exames"],
                     url,
-                    datas_filtradas=datas_selecionadas,
+                    data_referencia=data_escolhida,
                     barra_progresso=progresso
                 )
             if sucesso:
@@ -62,7 +61,7 @@ elif aba == "🤖 Rodar tudo (automático)":
         if not nomes.strip():
             st.error("❌ Por favor, insira pelo menos um nome de paciente.")
             st.stop()
-        
+
         if not url.strip():
             st.error("❌ Por favor, insira o link da planilha do Google Sheets.")
             st.stop()
@@ -73,35 +72,35 @@ elif aba == "🤖 Rodar tudo (automático)":
             # 1. Baixar PDFs
             st.info("🔽 Passo 1: Baixando PDFs de todos os exames disponíveis...")
             lista_nomes = [nome.strip() for nome in nomes.strip().splitlines() if nome.strip()]
-            
+
             # Chama a função com a lista de nomes
             pasta_downloads = executar_robo_fmabc(nomes_pacientes=lista_nomes)
-            
+
             if not pasta_downloads:
                 st.error("❌ Falha no download dos PDFs.")
                 st.stop()
-                
+
             progresso.progress(0.33)
 
             # 2. Extrair exames da pasta criada
             st.info("📄 Passo 2: Extraindo exames da pasta de downloads...")
-            
+
             df_exames = executar_extrator_tabelado(pasta_manual=pasta_downloads)
-            
+
             if df_exames is None or df_exames.empty:
                 st.error("❌ Nenhum exame foi extraído dos PDFs.")
                 st.stop()
-                
+
             st.session_state["df_exames"] = df_exames
             progresso.progress(0.66)
 
             # 3. Enviar ao Google Sheets apenas a data escolhida
             st.info("📤 Passo 3: Enviando exames filtrados por data ao Google Sheets...")
-            
+
             sucesso = enviar_para_google_sheets(
                 df_exames,
                 url,
-                datas_filtradas=[data_escolhida],
+                data_referencia=data_escolhida,
                 barra_progresso=progresso
             )
             progresso.progress(1.0)

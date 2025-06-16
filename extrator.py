@@ -7,21 +7,20 @@ import os
 import streamlit as st
 from datetime import datetime, timedelta
 
-def definir_padroes():
-    return {
-        "Creatinina": r"CREATININA.*?\n.*?([\d,\.]+)",
-        "Ureia": r"UR[ÉE]IA.*?\n.*?([\d,\.]+)",
-        "Bicarbonato": r"BICARBONATO.*?\n.*?([\d,\.]+)",
-        "Sódio": r"S[ÓO]DIO.*?\n.*?([\d,\.]+)",
-        "Potássio": r"POT[ÁA]SSIO.*?\n.*?([\d,\.]+)",
-        "Magnésio": r"MAGN[ÉE]SIO.*?RESULTADO\s*:?.*?([\d,\.]+)",
-        "Cálcio": r"C[ÁA]LCIO\s*(?!IONICO|I[ÔO]NICO).*?RESULTADO\s*:?[\s\n]*([\d,\.]+)",
-        "Cálcio Iônico": r"C[ÁA]LCIO I[ÔO]NICO.*?RESULTADO\s*:?.*?([\d,\.]+)",
-        "Fósforo": r"F[ÓO]SFORO.*?\n.*?([\d,\.]+)",
-        "Hemoglobina": r"HEMOGLOBINA\s*:\s*([\d,\.]+)",
-        "Plaquetas": r"PLAQUETAS.*?:\s*([\d,\.]+)",
-        "Proteína C Reativa": r"PROTE[ÍI]NA C REATIVA.*?([\d,\.]+)",
-    }
+definir_padroes = lambda: {
+    "Creatinina": r"CREATININA.*?\n.*?([\d,\.]+)",
+    "Ureia": r"UR[ÉE]IA.*?\n.*?([\d,\.]+)",
+    "Bicarbonato": r"BICARBONATO.*?\n.*?([\d,\.]+)",
+    "Sódio": r"S[ÓO]DIO.*?\n.*?([\d,\.]+)",
+    "Potássio": r"POT[ÁA]SSIO.*?\n.*?([\d,\.]+)",
+    "Magnésio": r"MAGN[ÉE]SIO.*?RESULTADO\s*:?.*?([\d,\.]+)",
+    "Cálcio": r"C[ÁA]LCIO\s*(?!IONICO|I[ÔO]NICO).*?RESULTADO\s*:?[\s\n]*([\d,\.]+)",
+    "Cálcio Iônico": r"C[ÁA]LCIO I[ÔO]NICO.*?RESULTADO\s*:?.*?([\d,\.]+)",
+    "Fósforo": r"F[ÓO]SFORO.*?\n.*?([\d,\.]+)",
+    "Hemoglobina": r"HEMOGLOBINA\s*:\s*([\d,\.]+)",
+    "Plaquetas": r"PLAQUETAS.*?:\s*([\d,\.]+)",
+    "Proteína C Reativa": r"PROTE[ÍI]NA C REATIVA.*?([\d,\.]+)",
+}
 
 def extrair_texto_pdf(filepath):
     with fitz.open(filepath) as doc:
@@ -76,7 +75,7 @@ def extrair_exames_dos_pdfs(pasta):
 
 def executar_extrator_tabelado(pasta_manual=None):
     st.subheader("📊 Extração de exames")
-    
+
     pasta_padrao = "/home/karolinewac/tablab_abc/pdfs_abc"
 
     if pasta_manual:
@@ -123,10 +122,12 @@ def executar_extrator_tabelado(pasta_manual=None):
         )
 
         if isinstance(datas_escolhidas, tuple):
-            data_ini, data_fim = [pd.to_datetime(d) for d in datas_escolhidas]
-            data_ini = data_ini.replace(hour=0, minute=0, second=0)
-            data_fim = data_fim.replace(hour=23, minute=59, second=59)
-            df = df[(df["Data"] >= data_ini) & (df["Data"] <= data_fim)]
+            data_hoje = pd.to_datetime(datas_escolhidas[1])
+            data_ontem = data_hoje - timedelta(days=1)
+            inicio_ontem = pd.to_datetime(f"{data_ontem.date()} 11:30")
+            fim_hoje = pd.to_datetime(f"{data_hoje.date()} 23:59")
+
+            df = df[(df["Data"] >= inicio_ontem) & (df["Data"] <= fim_hoje)]
             st.session_state["datas_escolhidas"] = datas_escolhidas
 
         nomes = sorted(df["Paciente"].dropna().unique())

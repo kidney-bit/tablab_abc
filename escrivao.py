@@ -58,8 +58,9 @@ def enviar_para_google_sheets(df, url, data_referencia=None, barra_progresso=Non
         data_véspera = data_ref - timedelta(days=1)
         hora_corte = pd.to_timedelta("11:30:00")
 
-        df = df[((df["Data"].dt.normalize() == data_ref) | 
-                 ((df["Data"].dt.normalize() == data_véspera) & (df["Data"].dt.time >= (datetime.min + hora_corte).time())))]
+        df = df[((df["Data"].dt.normalize() == data_ref) |
+                 ((df["Data"].dt.normalize() == data_véspera) &
+                  (df["Data"].dt.time >= (datetime.min + hora_corte).time())))]
 
     registros = []
     for (paciente, data), grupo in df.groupby(["Paciente", df["Data"].dt.normalize()]):

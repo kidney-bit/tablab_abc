@@ -127,6 +127,9 @@ def executar_extrator_tabelado(pasta_manual=None):
             inicio_ontem = pd.to_datetime(f"{data_ontem.date()} 11:30")
             fim_hoje = pd.to_datetime(f"{data_hoje.date()} 23:59")
 
+            st.write("📌 Intervalo de filtro:", inicio_ontem, "→", fim_hoje)
+            st.write("📌 Datas extraídas:", df["Data"].sort_values())
+
             df = df[(df["Data"] >= inicio_ontem) & (df["Data"] <= fim_hoje)]
             st.session_state["datas_escolhidas"] = datas_escolhidas
 

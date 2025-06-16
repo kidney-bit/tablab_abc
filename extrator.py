@@ -122,15 +122,10 @@ def executar_extrator_tabelado(pasta_manual=None):
         )
 
         if isinstance(datas_escolhidas, tuple):
-            data_fim = pd.to_datetime(datas_escolhidas[1])
-            data_ini = data_fim - timedelta(days=1)
-            inicio_filtro = pd.to_datetime(f"{data_ini.date()} 11:30")
-            fim_filtro = pd.to_datetime(f"{data_fim.date()} 23:59")
-
-            st.write("📌 Intervalo de filtro:", inicio_filtro, "→", fim_filtro)
-            st.write("📌 Datas extraídas:", df["Data"].sort_values())
-
-            df = df[(df["Data"] >= inicio_filtro) & (df["Data"] <= fim_filtro)]
+            data_ini, data_fim = [pd.to_datetime(d) for d in datas_escolhidas]
+            data_ini = data_ini.replace(hour=0, minute=0, second=0)
+            data_fim = data_fim.replace(hour=23, minute=59, second=59)
+            df = df[(df["Data"] >= data_ini) & (df["Data"] <= data_fim)]
             st.session_state["datas_escolhidas"] = datas_escolhidas
 
         nomes = sorted(df["Paciente"].dropna().unique())

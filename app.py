@@ -2,7 +2,7 @@
 
 import streamlit as st
 import os
-from datetime import datetime
+from datetime import datetime, date
 
 from robo_fmabc import executar_robo_fmabc
 from extrator import executar_extrator_tabelado
@@ -29,7 +29,13 @@ elif aba == "📊 Extrair exames dos PDFs":
 elif aba == "📤 Enviar exames para o Censo":
     if "df_exames" in st.session_state:
         url = st.text_input("📎 Cole aqui o link da planilha do Google Sheets:")
-        data_escolhida = st.date_input("📆 Escolha a data de referência (para incluir também exames de ontem após 11h30):")
+
+        hoje = date.today()
+        if "data_ref" not in st.session_state:
+            st.session_state["data_ref"] = hoje
+
+        data_ref = st.date_input("📆 Escolha a data de referência para o envio:", value=st.session_state["data_ref"])
+        st.session_state["data_ref"] = data_ref
 
         if st.button("🚀 Enviar para o Censo"):
             progresso = st.progress(0)
@@ -37,7 +43,7 @@ elif aba == "📤 Enviar exames para o Censo":
                 sucesso = enviar_para_google_sheets(
                     st.session_state["df_exames"],
                     url,
-                    data_referencia=data_escolhida,
+                    data_referencia=data_ref,
                     barra_progresso=progresso
                 )
             if sucesso:

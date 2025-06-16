@@ -58,6 +58,11 @@ def extrair_valores(texto, padroes):
 def extrair_exames_dos_pdfs(pasta):
     padroes = definir_padroes()
     registros = []
+
+    if not os.path.isdir(pasta):
+        return pd.DataFrame(columns=["Paciente", "Data"] +
+                             [k for k in padroes.keys() if k != "Cálcio Iônico"])
+
     for arquivo in os.listdir(pasta):
         if arquivo.lower().endswith(".pdf"):
             try:
@@ -69,8 +74,11 @@ def extrair_exames_dos_pdfs(pasta):
                 registros.append({"Paciente": nome, "Data": data, **valores})
             except Exception:
                 continue
-    df = pd.DataFrame(registros)
-    df = df[df["Data"].notna()]
+
+    colunas = ["Paciente", "Data"] + [k for k in padroes.keys() if k != "Cálcio Iônico"]
+    df = pd.DataFrame(registros, columns=colunas)
+    if "Data" in df.columns:
+        df = df[df["Data"].notna()]
     return df
 
 def executar_extrator_tabelado(pasta_manual=None):

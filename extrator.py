@@ -111,22 +111,16 @@ def executar_extrator_tabelado(pasta_manual=None):
         st.markdown("### 🔍 Filtros")
 
         hoje = pd.to_datetime(datetime.now().date())
-        ontem = hoje - timedelta(days=1)
+        data_ref = st.date_input("Escolha a data de referência para o filtro:", value=hoje).to_pydatetime()
+        data_ref = pd.to_datetime(data_ref)
+        data_véspera = data_ref - timedelta(days=1)
 
-        if "datas_escolhidas" not in st.session_state:
-            st.session_state["datas_escolhidas"] = (ontem.date(), hoje.date())
-
-        datas_escolhidas = st.date_input(
-            "Filtrar por intervalo de datas:",
-            value=st.session_state["datas_escolhidas"]
+        hora_corte = pd.to_timedelta("11:30:00")
+        filtro = (
+            (df["Data"].dt.normalize() == data_ref) |
+            ((df["Data"].dt.normalize() == data_véspera) & (df["Data"].dt.time >= (datetime.min + hora_corte).time()))
         )
-
-        if isinstance(datas_escolhidas, tuple):
-            data_ini, data_fim = [pd.to_datetime(d) for d in datas_escolhidas]
-            data_ini = data_ini.replace(hour=0, minute=0, second=0)
-            data_fim = data_fim.replace(hour=23, minute=59, second=59)
-            df = df[(df["Data"] >= data_ini) & (df["Data"] <= data_fim)]
-            st.session_state["datas_escolhidas"] = datas_escolhidas
+        df = df[filtro]
 
         nomes = sorted(df["Paciente"].dropna().unique())
         filtro_nome = st.multiselect("Filtrar por nome do paciente:", nomes)
@@ -134,8 +128,6 @@ def executar_extrator_tabelado(pasta_manual=None):
             df = df[df["Paciente"].isin(filtro_nome)]
 
         if st.button("🔁 Limpar filtros"):
-            st.session_state["datas_escolhidas"] = (ontem.date(), hoje.date())
-            filtro_nome.clear()
             st.rerun()
 
         st.dataframe(df, use_container_width=True)

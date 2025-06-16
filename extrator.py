@@ -13,12 +13,12 @@ definir_padroes = lambda: {
     "Bicarbonato": r"BICARBONATO.*?\n.*?([\d,\.]+)",
     "Sódio": r"S[ÓO]DIO.*?\n.*?([\d,\.]+)",
     "Potássio": r"POT[ÁA]SSIO.*?\n.*?([\d,\.]+)",
-    "Magnésio": r"MAGN[ÉE]SIO.*?RESULTADO\s*:?.*?([\d,\.]+)",
-    "Cálcio": r"C[ÁA]LCIO\s*(?!IONICO|I[ÔO]NICO).*?RESULTADO\s*:?[\s\n]*([\d,\.]+)",
-    "Cálcio Iônico": r"C[ÁA]LCIO I[ÔO]NICO.*?RESULTADO\s*:?.*?([\d,\.]+)",
+    "Magnésio": r"MAGN[ÉE]SIO.*?RESULTADO\\s*:?.*?([\d,\.]+)",
+    "Cálcio": r"C[ÁA]LCIO\\s*(?!IONICO|I[ÔO]NICO).*?RESULTADO\\s*:?[\\s\\n]*([\d,\.]+)",
+    "Cálcio Iônico": r"C[ÁA]LCIO I[ÔO]NICO.*?RESULTADO\\s*:?.*?([\d,\.]+)",
     "Fósforo": r"F[ÓO]SFORO.*?\n.*?([\d,\.]+)",
-    "Hemoglobina": r"HEMOGLOBINA\s*:\s*([\d,\.]+)",
-    "Plaquetas": r"PLAQUETAS.*?:\s*([\d,\.]+)",
+    "Hemoglobina": r"HEMOGLOBINA\\s*:\\s*([\d,\.]+)",
+    "Plaquetas": r"PLAQUETAS.*?:\\s*([\d,\.]+)",
     "Proteína C Reativa": r"PROTE[ÍI]NA C REATIVA.*?([\d,\.]+)",
 }
 

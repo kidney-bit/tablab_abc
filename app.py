@@ -13,14 +13,14 @@ st.title("🧪 tablab abc")
 
 # Menu lateral
 aba = st.sidebar.radio("Escolha a funcionalidade:", [
-    "⬇️ Baixar PDFs",
+    "⬇️ Download de exames",
     "📊 Extrair exames dos PDFs",
     "📤 Enviar exames para o Censo",
-    "🤖 Rodar tudo (automático)"
+    "🐯 Tudo de uma vez"
 ])
 
 # Funcionalidades separadas
-if aba == "⬇️ Baixar PDFs":
+if aba == "⬇️ Download de exames":
     executar_robo_fmabc()
 
 elif aba == "📊 Extrair exames dos PDFs":
@@ -37,7 +37,7 @@ elif aba == "📤 Enviar exames para o Censo":
         data_ref = st.date_input("📆 Escolha a data de referência para o envio:", value=st.session_state["data_ref"])
         st.session_state["data_ref"] = data_ref
 
-        if st.button("🚀 Enviar para o Censo"):
+        if st.button("📤 Enviar dados ao Censo"):
             progresso = st.progress(0)
             with st.spinner("⏳ Enviando dados para o Censo..."):
                 sucesso = enviar_para_google_sheets(
@@ -54,15 +54,15 @@ elif aba == "📤 Enviar exames para o Censo":
         st.warning("Nenhum exame extraído ainda. Por favor, realize a extração primeiro.")
 
 # Execução automatizada
-elif aba == "🤖 Rodar tudo (automático)":
-    st.markdown("### 🤖 Execução Automatizada Completa")
-    st.info("Esta opção executa todo o fluxo: download → extração → envio ao Google Sheets")
+elif aba == "🐯 Tudo de uma vez":
+    st.markdown("### 🐯 Execução Completa")
+    st.info("Esta opção executa todo o processo: download → extração → envio ao Google Sheets")
 
     nomes = st.text_area("📋 Cole aqui os nomes dos pacientes (um por linha):")
-    data_escolhida = st.date_input("📆 Data que será enviada ao Censo:")
+    data_escolhida = st.date_input("📆 Data que será enviada ao Censo:", value=date.today())
     url = st.text_input("📎 Cole o link da planilha do Google Sheets:")
 
-    if st.button("🚀 Executar Fluxo Completo"):
+    if st.button("🚀 Executar Tudo"):
         # Validação dos campos
         if not nomes.strip():
             st.error("❌ Por favor, insira pelo menos um nome de paciente.")

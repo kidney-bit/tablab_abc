@@ -52,25 +52,24 @@ def enviar_para_google_sheets(df, url, data_referencia=None, barra_progresso=Non
 
     df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
     df = df[df["Data"].notna()]
+    df["Data_agrup"] = df["Data"].dt.normalize()
 
     if data_referencia:
         data_ref = pd.to_datetime(data_referencia).normalize()
         data_véspera = data_ref - timedelta(days=1)
         hora_corte = pd.to_timedelta("11:30:00")
 
-        df = df[((df["Data"].dt.normalize() == data_ref) |
-                 ((df["Data"].dt.normalize() == data_véspera) &
+        df = df[((df["Data_agrup"] == data_ref) |
+                 ((df["Data_agrup"] == data_véspera) &
                   (df["Data"].dt.time >= (datetime.min + hora_corte).time())))]
 
-        df["Data"] = df["Data"].dt.normalize()
-
     registros = []
-    for (paciente, data), grupo in df.groupby(["Paciente", "Data"]):
+    for (paciente, data_agrup), grupo in df.groupby(["Paciente", "Data_agrup"]):
         grupo = grupo.sort_values("Data")
         ultimo = grupo.iloc[-1]
         registro = {
             "Paciente": paciente,
-            "Data": data.strftime("%d/%m/%Y"),
+            "Data": ultimo["Data"].strftime("%d/%m/%Y %H:%M"),
             "Creatinina": pd.to_numeric(grupo["Creatinina"], errors="coerce").max(),
             "Ureia": pd.to_numeric(grupo["Ureia"], errors="coerce").max(),
             "Bicarbonato": pd.to_numeric(ultimo["Bicarbonato"], errors="coerce"),

@@ -111,7 +111,12 @@ def executar_extrator_tabelado(pasta_manual=None):
         st.markdown("### 🔍 Filtros")
 
         hoje = datetime.now().date()
-        data_ref = st.date_input("Escolha a data de referência para o filtro:", value=hoje)
+        if "data_ref" not in st.session_state:
+            st.session_state["data_ref"] = hoje
+
+        data_ref = st.date_input("Escolha a data de referência para o filtro:", value=st.session_state["data_ref"])
+        st.session_state["data_ref"] = data_ref
+
         data_véspera = pd.to_datetime(data_ref - timedelta(days=1))
         data_ref = pd.to_datetime(data_ref)
 
@@ -128,6 +133,7 @@ def executar_extrator_tabelado(pasta_manual=None):
             df = df[df["Paciente"].isin(filtro_nome)]
 
         if st.button("🔁 Limpar filtros"):
+            st.session_state.pop("data_ref", None)
             st.rerun()
 
         st.dataframe(df, use_container_width=True)

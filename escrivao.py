@@ -62,8 +62,10 @@ def enviar_para_google_sheets(df, url, data_referencia=None, barra_progresso=Non
                  ((df["Data"].dt.normalize() == data_véspera) &
                   (df["Data"].dt.time >= (datetime.min + hora_corte).time())))]
 
+        df["Data"] = df["Data"].dt.normalize()
+
     registros = []
-    for (paciente, data), grupo in df.groupby(["Paciente", df["Data"].dt.normalize()]):
+    for (paciente, data), grupo in df.groupby(["Paciente", "Data"]):
         grupo = grupo.sort_values("Data")
         ultimo = grupo.iloc[-1]
         registro = {

@@ -1,6 +1,6 @@
 """
 robo_fmabc.py - Robô para download de exames com Selenium
-Versão para servidor com gerenciamento de sessões
+Versão corrigida para Google Cloud Platform
 """
 
 import streamlit as st
@@ -24,19 +24,22 @@ import atexit
 import signal
 import uuid
 import logging
+import psutil
+import random
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ChromeManager:
-    """Gerenciador do Chrome para servidor - Controla sessões e diretórios únicos"""
+    """Gerenciador do Chrome otimizado para Google Cloud Platform"""
     
     def __init__(self, download_path=None, headless=True):
         self.driver = None
         self.temp_dir = None
         self.download_path = download_path
         self.headless = headless
+        self.session_id = f"{uuid.uuid4().hex}_{int(time.time())}"
         self._setup_cleanup()
     
     def _setup_cleanup(self):
@@ -55,55 +58,147 @@ class ChromeManager:
             except Exception as e:
                 logger.warning(f"⚠️ Falha ao registrar signal handler: {e}")
     
+    def _force_kill_chrome_processes(self):
+        """Mata todos os processos Chrome de forma agressiva"""
+        try:
+            # Listar processos Chrome
+            chrome_processes = []
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'] and any(x in proc.info['name'].lower() for x in ['chrome', 'chromium', 'chromedriver']):
+                        chrome_processes.append(proc.info['pid'])
+                    elif proc.info['cmdline'] and any('chrome' in str(cmd).lower() for cmd in proc.info['cmdline']):
+                        chrome_processes.append(proc.info['pid'])
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            # Matar processos encontrados
+            for pid in chrome_processes:
+                try:
+                    proc = psutil.Process(pid)
+                    proc.terminate()
+                    proc.wait(timeout=3)
+                except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+                    try:
+                        proc.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+                except Exception:
+                    pass
+            
+            # Backup com comandos do sistema
+            subprocess.run(['pkill', '-9', '-f', 'chrome'], check=False, capture_output=True, timeout=3)
+            subprocess.run(['pkill', '-9', '-f', 'chromium'], check=False, capture_output=True, timeout=3)
+            subprocess.run(['pkill', '-9', '-f', 'chromedriver'], check=False, capture_output=True, timeout=3)
+            
+            logger.info("🧹 Todos os processos Chrome foram terminados")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao matar processos Chrome: {e}")
+    
     def _cleanup_temp_dir(self):
-        """Limpa diretório temporário"""
+        """Limpa diretório temporário de forma robusta"""
         if self.temp_dir and os.path.exists(self.temp_dir):
             try:
+                # Tenta remover normalmente
                 shutil.rmtree(self.temp_dir, ignore_errors=True)
+                
+                # Se ainda existe, força remoção
+                if os.path.exists(self.temp_dir):
+                    subprocess.run(['rm', '-rf', self.temp_dir], check=False, timeout=5)
+                
                 logger.info(f"✅ Diretório temporário limpo: {self.temp_dir}")
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao limpar diretório: {e}")
+                # Tenta com sudo em último caso
+                try:
+                    subprocess.run(['sudo', 'rm', '-rf', self.temp_dir], check=False, timeout=5)
+                except:
+                    pass
     
     def _kill_chrome_processes(self):
-        """Mata processos Chrome órfãos"""
-        try:
-            # Tentar matar processos Chrome
-            subprocess.run(['pkill', '-f', 'chrome'], check=False, capture_output=True, timeout=5)
-            subprocess.run(['pkill', '-f', 'chromium'], check=False, capture_output=True, timeout=5)
-            subprocess.run(['pkill', '-f', 'chromedriver'], check=False, capture_output=True, timeout=5)
-            
-            time.sleep(1)
-            
-            # Força morte se necessário
-            subprocess.run(['pkill', '-9', '-f', 'chrome'], check=False, capture_output=True, timeout=3)
-            subprocess.run(['pkill', '-9', '-f', 'chromium'], check=False, capture_output=True, timeout=3)
-            
-            logger.info("🧹 Processos Chrome limpos")
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao limpar processos: {e}")
+        """Mata processos Chrome órfãos de forma inteligente"""
+        self._force_kill_chrome_processes()
+        time.sleep(2)  # Aguarda processos terminarem
     
-    def _create_chrome_options(self):
-        """Cria opções otimizadas do Chrome"""
-        # Criar diretório temporário único
-        # Criar diretório temporário único e garantir limpeza
-        base_temp = tempfile.gettempdir()
-        self.temp_dir = os.path.join(base_temp, f'chrome_profile_{uuid.uuid4().hex}')
-
+    def _create_unique_temp_dir(self):
+        """Cria diretório temporário completamente único"""
+        # Múltiplas camadas de unicidade
+        timestamp = str(int(time.time() * 1000000))  # microsegundos
+        random_suffix = str(random.randint(10000, 99999))
+        process_id = str(os.getpid())
+        
+        # Base temporária do sistema
+        system_temp = tempfile.gettempdir()
+        
+        # Subdiretório único
+        unique_name = f"chrome_session_{self.session_id}_{timestamp}_{process_id}_{random_suffix}"
+        self.temp_dir = os.path.join(system_temp, unique_name)
+        
+        # Remove se existir (não deveria)
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-        os.makedirs(self.temp_dir, exist_ok=True)
-
+        
+        # Cria diretório
+        os.makedirs(self.temp_dir, mode=0o700, exist_ok=False)
+        
+        logger.info(f"📁 Diretório temporário criado: {self.temp_dir}")
+        return self.temp_dir
+    
+    def _create_chrome_options(self):
+        """Cria opções otimizadas do Chrome para GCP"""
+        # Criar diretório temporário único
+        temp_dir = self._create_unique_temp_dir()
+        
         options = Options()
 
-# Configurações críticas para servidor
+        # Configurações críticas para GCP e servidores
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
-        options.add_argument('--remote-debugging-port=0')  # Porta aleatória
-        options.add_argument(f'--user-data-dir={self.temp_dir}')  # Diretório único
+        options.add_argument('--disable-software-rasterizer')
+        options.add_argument('--disable-background-timer-throttling')
+        options.add_argument('--disable-backgrounding-occluded-windows')
+        options.add_argument('--disable-renderer-backgrounding')
+        options.add_argument('--disable-features=TranslateUI')
+        options.add_argument('--disable-features=BlinkGenPropertyTrees')
+        options.add_argument('--disable-ipc-flooding-protection')
         
-        # Configurações de download otimizadas
+        # Diretório de dados único - CRÍTICO
+        options.add_argument(f'--user-data-dir={temp_dir}')
+        options.add_argument(f'--data-path={temp_dir}')
+        options.add_argument(f'--disk-cache-dir={temp_dir}/cache')
+        
+        # Porta de debug aleatória
+        debug_port = random.randint(9000, 9999)
+        options.add_argument(f'--remote-debugging-port={debug_port}')
+        
+        # Configurações de rede e segurança
+        options.add_argument('--disable-web-security')
+        options.add_argument('--disable-features=VizDisplayCompositor')
+        options.add_argument('--disable-popup-blocking')
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-plugins')
+        options.add_argument('--disable-images')
+        options.add_argument('--disable-java')
+        options.add_argument('--disable-background-networking')
+        options.add_argument('--disable-sync')
+        options.add_argument('--disable-translate')
+        options.add_argument('--disable-default-apps')
+        options.add_argument('--no-first-run')
+        options.add_argument('--no-default-browser-check')
+        options.add_argument('--disable-logging')
+        options.add_argument('--disable-client-side-phishing-detection')
+        options.add_argument('--disable-component-update')
+        options.add_argument('--disable-domain-reliability')
+        options.add_argument('--disable-features=AutomationControlled')
+        
+        # Configurações de memória para GCP
+        options.add_argument('--memory-pressure-off')
+        options.add_argument('--max_old_space_size=4096')
+        options.add_argument('--aggressive-cache-discard')
+        
+        # Configurações de download
         if self.download_path:
             prefs = {
                 "download.default_directory": self.download_path,
@@ -120,82 +215,119 @@ class ChromeManager:
             }
             options.add_experimental_option("prefs", prefs)
         
-        # Otimizações de velocidade
-        options.add_argument("--disable-extensions")
-        options.add_argument("--disable-web-security")
-        options.add_argument("--disable-features=VizDisplayCompositor")
-        options.add_argument("--disable-popup-blocking")
-        options.add_argument("--disable-images")
-        options.add_argument("--disable-plugins")
-        options.add_argument("--disable-java")
-        options.add_argument("--disable-background-networking")
-        options.add_argument("--disable-sync")
-        options.add_argument("--disable-translate")
-        options.add_argument("--disable-default-apps")
-        options.add_argument("--no-first-run")
-        options.add_argument("--no-default-browser-check")
-        options.add_argument("--disable-logging")
-        options.add_argument("--disable-client-side-phishing-detection")
-        options.add_argument("--disable-backgrounding-occluded-windows")
-        options.add_argument("--disable-renderer-backgrounding")
-        options.add_argument("--disable-background-timer-throttling")
-        
         # Anti-detecção
-        options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
         
         # Configurações de janela
         options.add_argument("--window-size=1280,720")
+        options.add_argument("--start-maximized")
         
         if self.headless:
-            options.add_argument("--headless")
+            options.add_argument("--headless=new")  # Novo modo headless
         
         return options
     
-    def start_driver(self):
-        """Inicia o driver Chrome"""
-        # Limpeza prévia
-        self._kill_chrome_processes()
-        self._cleanup_temp_dir()  # ← Adiciona isso aqui
-        time.sleep(2)
+    def _find_chrome_binary(self):
+        """Encontra o binário do Chrome no sistema"""
+        chrome_paths = [
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/google-chrome",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+            "/usr/bin/chrome",
+            "/opt/google/chrome/chrome",
+            "/opt/google/chrome/google-chrome",
+            "/snap/bin/chromium"
+        ]
         
-        try:
-            options = self._create_chrome_options()
-            
-            # Tentar diferentes caminhos do Chrome
-            chrome_paths = [
-                "/usr/bin/google-chrome",
-                "/usr/bin/chromium-browser",
-                "/usr/bin/chrome",
-                "/opt/google/chrome/chrome"
-            ]
-            
-            for chrome_path in chrome_paths:
-                if os.path.exists(chrome_path):
-                    options.binary_location = chrome_path
-                    break
-            
-            # Configurar serviço do ChromeDriver
-            service = Service("/usr/local/bin/chromedriver")
-            
-            # Criar driver
-            self.driver = webdriver.Chrome(service=service, options=options)
-            
-            # Configurações de timeout
-            self.driver.implicitly_wait(10)
-            self.driver.set_page_load_timeout(30)
-            
-            # Anti-detecção
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            
-            logger.info(f"✅ Chrome iniciado com sucesso - Temp Dir: {self.temp_dir}")
-            return self.driver
-            
-        except Exception as e:
-            self._cleanup_temp_dir()
-            logger.error(f"❌ Erro ao iniciar Chrome: {e}")
-            raise
+        for chrome_path in chrome_paths:
+            if os.path.exists(chrome_path) and os.access(chrome_path, os.X_OK):
+                logger.info(f"✅ Chrome encontrado em: {chrome_path}")
+                return chrome_path
+        
+        raise Exception("❌ Chrome não encontrado no sistema")
+    
+    def _find_chromedriver(self):
+        """Encontra o ChromeDriver no sistema"""
+        driver_paths = [
+            "/usr/local/bin/chromedriver",
+            "/usr/bin/chromedriver",
+            "/opt/chromedriver/chromedriver",
+            "/home/chromedriver",
+            "./chromedriver"
+        ]
+        
+        for driver_path in driver_paths:
+            if os.path.exists(driver_path) and os.access(driver_path, os.X_OK):
+                logger.info(f"✅ ChromeDriver encontrado em: {driver_path}")
+                return driver_path
+        
+        raise Exception("❌ ChromeDriver não encontrado no sistema")
+    
+    def start_driver(self):
+        """Inicia o driver Chrome com retry e recuperação"""
+        max_attempts = 3
+        
+        for attempt in range(max_attempts):
+            try:
+                logger.info(f"🚀 Tentativa {attempt + 1}/{max_attempts} de iniciar Chrome")
+                
+                # Limpeza agressiva antes de cada tentativa
+                self._kill_chrome_processes()
+                time.sleep(3)
+                
+                # Criar opções
+                options = self._create_chrome_options()
+                
+                # Encontrar binários
+                chrome_binary = self._find_chrome_binary()
+                options.binary_location = chrome_binary
+                
+                chromedriver_path = self._find_chromedriver()
+                
+                # Configurar serviço
+                service = Service(chromedriver_path)
+                service.start()
+                
+                # Criar driver
+                self.driver = webdriver.Chrome(service=service, options=options)
+                
+                # Configurações de timeout
+                self.driver.implicitly_wait(10)
+                self.driver.set_page_load_timeout(60)
+                self.driver.set_script_timeout(30)
+                
+                # Anti-detecção
+                self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                
+                # Teste básico
+                self.driver.get("data:,")  # Página em branco para teste
+                
+                logger.info(f"✅ Chrome iniciado com sucesso na tentativa {attempt + 1}")
+                logger.info(f"📁 Usando diretório: {self.temp_dir}")
+                return self.driver
+                
+            except Exception as e:
+                logger.error(f"❌ Tentativa {attempt + 1} falhou: {e}")
+                
+                # Limpeza após falha
+                if self.driver:
+                    try:
+                        self.driver.quit()
+                    except:
+                        pass
+                    self.driver = None
+                
+                self._cleanup_temp_dir()
+                self._kill_chrome_processes()
+                
+                if attempt < max_attempts - 1:
+                    wait_time = (attempt + 1) * 5
+                    logger.info(f"⏳ Aguardando {wait_time}s antes da próxima tentativa...")
+                    time.sleep(wait_time)
+                else:
+                    raise Exception(f"❌ Falha ao iniciar Chrome após {max_attempts} tentativas: {e}")
     
     def __enter__(self):
         """Context manager - entrada"""
@@ -210,7 +342,7 @@ class ChromeManager:
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao fechar driver: {e}")
         
-        time.sleep(2)
+        time.sleep(3)
         self._cleanup_temp_dir()
         self._kill_chrome_processes()
 
@@ -225,16 +357,25 @@ class DownloadMonitor:
     def reset(self):
         """Reseta o estado do monitor"""
         try:
-            self.arquivos_iniciais = set(os.listdir(self.pasta_download))
-        except:
+            if os.path.exists(self.pasta_download):
+                self.arquivos_iniciais = set(os.listdir(self.pasta_download))
+            else:
+                os.makedirs(self.pasta_download, exist_ok=True)
+                self.arquivos_iniciais = set()
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao resetar monitor: {e}")
             self.arquivos_iniciais = set()
     
-    def aguardar_download(self, timeout=15):
+    def aguardar_download(self, timeout=20):
         """Aguarda download com verificação otimizada"""
         inicio = time.time()
         
         while time.time() - inicio < timeout:
             try:
+                if not os.path.exists(self.pasta_download):
+                    time.sleep(0.5)
+                    continue
+                    
                 arquivos_atuais = set(os.listdir(self.pasta_download))
                 
                 # Verifica arquivos temporários
@@ -243,7 +384,7 @@ class DownloadMonitor:
                 # Se há novos arquivos e não há temporários, download completo
                 novos_arquivos = arquivos_atuais - self.arquivos_iniciais
                 if novos_arquivos and not arquivos_temp:
-                    time.sleep(1)
+                    time.sleep(1)  # Aguarda estabilização
                     return True
                 
                 # Se há arquivos temporários, aguarda eles sumirem
@@ -252,15 +393,19 @@ class DownloadMonitor:
                 else:
                     time.sleep(1)
                     
-            except Exception:
+            except Exception as e:
+                logger.warning(f"⚠️ Erro no monitor: {e}")
                 time.sleep(0.5)
         
         # Verifica uma última vez se houve sucesso
         try:
-            arquivos_finais = set(os.listdir(self.pasta_download))
-            return len(arquivos_finais) > len(self.arquivos_iniciais)
+            if os.path.exists(self.pasta_download):
+                arquivos_finais = set(os.listdir(self.pasta_download))
+                return len(arquivos_finais) > len(self.arquivos_iniciais)
         except:
-            return False
+            pass
+        
+        return False
 
 
 def verificar_driver_ativo(driver):
@@ -275,32 +420,12 @@ def verificar_driver_ativo(driver):
 def contar_pdfs_pasta(pasta):
     """Conta arquivos PDF na pasta"""
     try:
+        if not os.path.exists(pasta):
+            return 0
         return len([f for f in os.listdir(pasta) if f.lower().endswith('.pdf')])
-    except:
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao contar PDFs: {e}")
         return 0
-
-
-def verificar_processos_orfaos():
-    """Verifica se há processos Chrome órfãos"""
-    try:
-        result = subprocess.run(["pgrep", "-f", "chrome"], capture_output=True, text=True)
-        return len(result.stdout.strip().split('\n')) > 1 if result.stdout.strip() else False
-    except:
-        return False
-
-
-def limpar_processos_chrome_inteligente():
-    """Remove processos Chrome órfãos apenas se necessário"""
-    if verificar_processos_orfaos():
-        st.info("🧹 Detectados processos órfãos, limpando...")
-        try:
-            subprocess.run(["pkill", "-f", "chrome"], check=False, capture_output=True, timeout=3)
-            subprocess.run(["pkill", "-f", "chromedriver"], check=False, capture_output=True, timeout=3)
-            time.sleep(0.5)
-        except Exception:
-            pass
-    else:
-        st.info("✅ Sem processos órfãos detectados")
 
 
 def fechar_abas_extras_rapido(driver, aba_principal):
@@ -318,8 +443,8 @@ def fechar_abas_extras_rapido(driver, aba_principal):
                 except:
                     pass
         driver.switch_to.window(aba_principal)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao fechar abas: {e}")
 
 
 def processar_downloads_paciente(driver, botoes, paciente, monitor, aba_principal):
@@ -337,18 +462,33 @@ def processar_downloads_paciente(driver, botoes, paciente, monitor, aba_principa
             # Reset do monitor para este download
             monitor.reset()
             
-            # Click otimizado
-            driver.execute_script("arguments[0].click();", botao)
+            # Click otimizado com retry
+            success = False
+            for attempt in range(3):
+                try:
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", botao)
+                    time.sleep(0.5)
+                    driver.execute_script("arguments[0].click();", botao)
+                    success = True
+                    break
+                except Exception as e:
+                    if attempt == 2:
+                        raise e
+                    time.sleep(1)
             
-            # Aguarda download com timeout reduzido
-            if monitor.aguardar_download(timeout=10):
+            if not success:
+                st.warning(f"⚠️ Falha ao clicar no download {idx_botao + 1}")
+                continue
+            
+            # Aguarda download
+            if monitor.aguardar_download(timeout=15):
                 downloads_sucesso += 1
                 st.success(f"✅ Download {idx_botao + 1} concluído")
             else:
                 st.warning(f"⚠️ Download {idx_botao + 1} pode ter falhado (timeout)")
             
-            # Pausa mínima entre downloads
-            time.sleep(0.5)
+            # Pausa entre downloads
+            time.sleep(1)
             
         except Exception as e:
             st.warning(f"Erro no download {idx_botao + 1}: {str(e)}")
@@ -359,14 +499,7 @@ def processar_downloads_paciente(driver, botoes, paciente, monitor, aba_principa
 
 def executar_downloads_automatico(nomes_pacientes, modo_headless=True):
     """
-    Função para executar downloads de forma automática (chamada pelo app.py)
-    
-    Args:
-        nomes_pacientes (list): Lista de nomes dos pacientes
-        modo_headless (bool): Se deve executar em modo headless
-    
-    Returns:
-        str: Caminho da pasta onde os PDFs foram salvos
+    Função para executar downloads de forma automática
     """
     
     # Configuração de pastas
@@ -375,9 +508,8 @@ def executar_downloads_automatico(nomes_pacientes, modo_headless=True):
     output_folder = os.path.join(base_folder, timestamp)
     os.makedirs(output_folder, exist_ok=True)
 
-    # Usar o ChromeManager otimizado
     try:
-        st.info("🚀 Iniciando navegador...")
+        st.info("🚀 Iniciando navegador otimizado para GCP...")
         
         with ChromeManager(download_path=output_folder, headless=modo_headless) as driver:
             st.info("🤖 Modo headless ativado" if modo_headless else "🖥️ Modo visual ativado")
@@ -391,7 +523,7 @@ def executar_downloads_automatico(nomes_pacientes, modo_headless=True):
 
             # Login
             st.info("🔑 Fazendo login...")
-            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.NAME, "userLogin")))
+            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.NAME, "userLogin")))
             driver.find_element(By.NAME, "userLogin").send_keys("HOAN")
             driver.find_element(By.NAME, "userPassword").send_keys("5438")
             driver.find_element(By.ID, "btnEntrar").click()
@@ -405,19 +537,19 @@ def executar_downloads_automatico(nomes_pacientes, modo_headless=True):
 
             st.info("🎯 Navegando para exames...")
             
-            # Navegação com timeouts
+            # Navegação com timeouts aumentados
             try:
-                element = WebDriverWait(driver, 10).until(
+                element = WebDriverWait(driver, 15).until(
                     EC.element_to_be_clickable((By.ID, "97-0B-E6-B7-F9-16-53-7C-C6-2C-E0-37-D0-67-F7-9E"))
                 )
                 driver.execute_script("arguments[0].click();", element)
-                time.sleep(1)
+                time.sleep(2)
                 
-                second_element = WebDriverWait(driver, 10).until(
+                second_element = WebDriverWait(driver, 15).until(
                     EC.element_to_be_clickable((By.ID, "A1-2C-C6-AF-7F-6B-2B-3E-D5-00-73-F2-37-A1-D6-25"))
                 )
                 driver.execute_script("arguments[0].click();", second_element)
-                time.sleep(1)
+                time.sleep(2)
                 
                 st.success("✅ Navegação concluída")
                 
@@ -441,11 +573,11 @@ def executar_downloads_automatico(nomes_pacientes, modo_headless=True):
                     aba_principal = driver.current_window_handle
 
                     # Busca
-                    campo = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "textoDigitado")))
+                    campo = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "textoDigitado")))
                     campo.clear()
                     campo.send_keys(paciente)
                     driver.find_element(By.XPATH, "//button[contains(., 'Pesquisar')]").click()
-                    time.sleep(2)
+                    time.sleep(3)
 
                     botoes = driver.find_elements(By.XPATH, "//button[contains(., 'Laudo Completo')]")
                     if not botoes:
@@ -474,15 +606,13 @@ def executar_downloads_automatico(nomes_pacientes, modo_headless=True):
 
     except Exception as e:
         st.error(f"❌ Erro crítico: {str(e)}")
+        logger.error(f"Erro crítico detalhado: {e}", exc_info=True)
         return None
 
 
 def executar_robo_fmabc(nomes_pacientes=None):
     """
     Função principal que pode ser chamada tanto pela interface quanto programaticamente
-    
-    Args:
-        nomes_pacientes (list, optional): Lista de nomes. Se None, usa interface do Streamlit
     """
     
     # Se recebeu lista de nomes, executa automaticamente

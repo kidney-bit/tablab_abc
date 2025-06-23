@@ -1,0 +1,9 @@
+[Unit]
+Description=Reinicia o tablab.service todos os dias às 23h59 (BRT)
+
+[Timer]
+OnCalendar=*-*-* 02:59:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

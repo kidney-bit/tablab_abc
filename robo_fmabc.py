@@ -27,6 +27,19 @@ import logging
 import psutil
 import random
 
+# Limpar diretórios temporários antigos na inicialização
+def cleanup_old_temp_dirs():
+    temp_base = tempfile.gettempdir()
+    for item in os.listdir(temp_base):
+        if item.startswith('chrome_session_'):
+            path = os.path.join(temp_base, item)
+            try:
+                shutil.rmtree(path, ignore_errors=True)
+            except:
+                pass
+
+cleanup_old_temp_dirs()
+
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

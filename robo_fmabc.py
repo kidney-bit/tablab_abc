@@ -85,11 +85,18 @@ class ChromeManager:
     def _create_chrome_options(self):
         """Cria opções otimizadas do Chrome"""
         # Criar diretório temporário único
-        self.temp_dir = tempfile.mkdtemp(prefix='chrome_profile_')
-        
+        # Criar diretório temporário único e garantir limpeza
+        base_temp = tempfile.gettempdir()
+        self.temp_dir = os.path.join(base_temp, f'chrome_profile_{uuid.uuid4().hex}')
+
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+        os.makedirs(self.temp_dir, exist_ok=True)
+
         options = Options()
-        
-        # Configurações críticas para servidor
+
+# Configurações críticas para servidor
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')

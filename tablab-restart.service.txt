@@ -1,0 +1,6 @@
+[Unit]
+Description=Reinicia o tablab.service automaticamente
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart tablab

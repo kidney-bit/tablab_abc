@@ -1,0 +1,14 @@
+[Unit]
+Description=App Streamlit Tablab
+After=network.target
+
+[Service]
+User=karolinewac
+WorkingDirectory=/home/karolinewac/tablab_abc
+ExecStart=/home/karolinewac/tablab_abc/run_app.sh
+Restart=always
+RestartSec=10
+Environment="PATH=/home/karolinewac/tablab_abc/venv/bin"
+
+[Install]
+WantedBy=multi-user.target

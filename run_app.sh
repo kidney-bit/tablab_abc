@@ -1,18 +1,23 @@
 #!/bin/bash
 
 PORT=8501
-PDF_DIR="/home/karolinewac/tablab_abc/pdfs_abc"
+APP_DIR="/home/karolinewac/tablab_abc"
+PDF_DIR="$APP_DIR/pdfs_abc"
+VENV_PATH="$APP_DIR/venv/bin/activate"
 
 echo "🧹 Limpando PDFs antigos em $PDF_DIR..."
-/usr/bin/rm -rf "$PDF_DIR"/*
+rm -rf "$PDF_DIR"/*
 
-PID=$(/usr/bin/lsof -t -i:$PORT)
-
+echo "🧼 Matando processos anteriores na porta $PORT..."
+PID=$(lsof -t -i:$PORT)
 if [ ! -z "$PID" ]; then
-  echo "🔴 Matando processo anterior na porta $PORT (PID: $PID)..."
-  /bin/kill -9 $PID
+  echo "🔴 Matando processo (PID: $PID)..."
+  kill -9 $PID
   sleep 1
 fi
 
+echo "📦 Ativando ambiente virtual..."
+source "$VENV_PATH"
+
 echo "🚀 Iniciando app Streamlit na porta $PORT..."
-/home/karolinewac/tablab_abc/venv/bin/python3 -m streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+python3 -m streamlit run app.py --server.port=$PORT --server.address=0.0.0.0

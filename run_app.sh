@@ -10,7 +10,7 @@ echo "🧹 Limpando PDFs antigos em $PDF_DIR..."
 
 echo "🧼 Matando processos anteriores na porta $PORT..."
 /usr/bin/lsof -t -i:$PORT | /usr/bin/xargs -r /bin/kill -9
-sleep 1
+/bin/sleep 1
 
 echo "🚀 Iniciando app Streamlit na porta $PORT..."
 "$PYTHON" -m streamlit run app.py --server.port=$PORT --server.address=0.0.0.0

@@ -147,10 +147,11 @@ class ChromeManager:
         return options
     
     def start_driver(self):
-        """Inicia o driver Chrome"""
-        # Limpeza prévia
-        self._kill_chrome_processes()
-        time.sleep(2)
+    """Inicia o driver Chrome"""
+    # Limpeza prévia
+    self._kill_chrome_processes()
+    self._cleanup_temp_dir()  # ← Adiciona isso aqui
+    time.sleep(2)
         
         try:
             options = self._create_chrome_options()

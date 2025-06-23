@@ -39,15 +39,21 @@ class ChromeManager:
         self.headless = headless
         self._setup_cleanup()
     
-    def _setup_cleanup(self):
+        def _setup_cleanup(self):
         """Configura limpeza automática"""
         def cleanup():
             self._cleanup_temp_dir()
             self._kill_chrome_processes()
-        
+            logger.info("🧼 Cleanup automático executado")
+
         atexit.register(cleanup)
-        signal.signal(signal.SIGTERM, lambda s, f: cleanup())
-        signal.signal(signal.SIGINT, lambda s, f: cleanup())
+
+        if threading.current_thread() is threading.main_thread():
+            try:
+                signal.signal(signal.SIGTERM, lambda s, f: cleanup())
+                signal.signal(signal.SIGINT, lambda s, f: cleanup())
+            except Exception as e:
+                logger.warning(f"⚠️ Falha ao registrar signal handler: {e}")
     
     def _cleanup_temp_dir(self):
         """Limpa diretório temporário"""

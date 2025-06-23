@@ -39,7 +39,7 @@ class ChromeManager:
         self.headless = headless
         self._setup_cleanup()
     
-        def _setup_cleanup(self):
+    def _setup_cleanup(self):
         """Configura limpeza automática"""
         def cleanup():
             self._cleanup_temp_dir()
